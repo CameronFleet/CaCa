@@ -1,5 +1,5 @@
 { 
-module Tokens where 
+module Main(main) where 
 }
 
 %wrapper "basic" 
@@ -23,36 +23,38 @@ $white+       ;
   \=            { \s -> TokenEquals }
   \{            { \s -> TokenLCurlyBrace }
   \}            { \s -> TokenRCurlyBrace }
+  as            { \s -> TokenAs}
   some          { \s -> TokenSome}
 
 
   $digit+       ;
-  $alpha+   { \s -> TokenString s } 
+  $alpha+      { \s -> TokenString s } 
   $relation+   { \s -> TokenRelationalSymbol s } 
 
 { 
 -- Each action has type :: String -> Token 
 -- The token type: 
 data Token = 
-  TokenStart       |
-  TokenEnd         |
-  TokenSemicolon   |
-  TokenComma       |
-  TokenFrom        |
-  TokenGet         |
-  TokenAnd         |
-  TokenWhere       |
-  TokenEquals      |
-  TokenLCurlyBrace |
-  TokenRCurlyBrace |
-  TokenSome        |
+  TokenStart          |
+  TokenEnd            |
+  TokenSemicolon      |
+  TokenComma          |
+  TokenFrom           |
+  TokenGet            |
+  TokenAnd            |
+  TokenWhere          |
+  TokenEquals         |
+  TokenLCurlyBrace    |
+  TokenRCurlyBrace    |
+  TokenSome           |
+  TokenAs             |
   TokenString String  |
   TokenRelationalSymbol String 
   deriving (Eq,Show) 
 
 
---main = do 
---    smth <- getContents
---    print (alexScanTokens smth )
+main = do 
+    smth <- getContents
+    print (alexScanTokens smth )
 
 }
