@@ -1,5 +1,5 @@
 { 
-module Parser where 
+module Main(main) where 
 import Tokens 
 
 
@@ -23,23 +23,28 @@ import Tokens
     get     { TokenGet }
     string  { TokenString $$ }
     relation { TokenRelationalSymbol $$ }
+    as      { TokenAs}
+
 
 %% 
 
 Program : start Statements end { Program $2}
 
-Statements : FromGet ';'                        { FromGetExpr $1 }
-           | FromGet ';' where '{' Equals '}'   { FromGetWhere $1 $5}
+Statements : FromGet ';' as Vars                       { FromGetExpr $1 }
+           | FromGet ';' where '{' Equals '}' as Vars  { FromGetWhere $1 $5}
 
-FromGet : from Relation get ToGet and FromGet   { FromGetAnd $2 $4 $6}   
-        | from Relation get ToGet               { FromGet $2 $4}
+FromGet : from Relation get ToGet and FromGet          { FromGetAnd $2 $4 $6}   
+        | from Relation get ToGet                      { FromGet $2 $4}
 
-Equals : Var '=' Var ';'                        { EqualVar $1 $3 }
-       | Var '=' Var ';' Equals                 { EqualVars $1 $3 $5}
+Equals : Var '=' Var ';'                               { EqualVar $1 $3 }
+       | Var '=' Var ';' Equals                        { EqualVars $1 $3 $5}
 
-ToGet : Some                                    { Params $1}
-      | Var                                     { Params1 $1}
-      | ToGet ',' ToGet                         { Params2 $1 $3}
+ToGet : Some                                           { Params $1}
+      | Var                                            { Params1 $1}
+      | ToGet ',' ToGet                                { Params2 $1 $3}
+
+Vars : Var                                             { Vars1 $1}
+     | Var ',' Vars                                    { Vars2 $1 $3}
 
 Some     : some string { Some $2 }
 Var      : string      { Var $1 }
@@ -64,12 +69,15 @@ data ToGet = Params Some
            | Params1 Var 
            | Params2 ToGet ToGet deriving Show
 
+data Vars = Vars1 Var 
+          | Vars2 Var Vars deriving Show
+
 data Some = Some String deriving Show
 data Var =  Var String deriving Show
 data Relation = Relation String deriving Show
 
---main = do 
---  inStr <- getContents
---  let parseTree = caca (alexScanTokens inStr)  
---  putStrLn (show(parseTree))
+main = do 
+  inStr <- getContents
+  let parseTree = caca (alexScanTokens inStr)  
+  putStrLn (show(parseTree))
 }
