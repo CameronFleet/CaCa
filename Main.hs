@@ -24,32 +24,32 @@ data Table = Column String [String] | Columns String [String] Table deriving Sho
 
 -- EVAL, The Whole evaluation of the AST
 
--- Evals a Program
-eval :: Program -> Table -> String
-eval (Program (FromGetExpr fromGet vars)) table = evalFromGetExpr fromGet vars table
-eval (Program (FromGetWhere fromGet equals vars)) _ = ""
+-- -- Evals a Program
+-- eval :: Program -> Table -> String
+-- eval (Program (FromGetExpr fromGet vars)) table = evalFromGetExpr fromGet vars table
+-- eval (Program (FromGetWhere fromGet equals vars)) _ = ""
 
--- Evals a From _ Get; Expression 
-evalFromGetExpr :: FromGet -> Vars -> Table -> String
-evalFromGetExpr _ asVars table = evalAsVars asVars table
+-- -- Evals a From _ Get; Expression 
+-- evalFromGetExpr :: FromGet -> Vars -> Table -> String
+-- evalFromGetExpr _ asVars table = evalAsVars asVars table
 
--- Evals a As _; Expression the 'as' vars, so eg. as name1, name 2 would return the string of : show(name1) ++ "," ++ show(name2)
-evalAsVars :: Vars -> Table -> String 
-evalAsVars vars table = evalAsVars' (varsToString vars) table
+-- -- Evals a As _; Expression the 'as' vars, so eg. as name1, name 2 would return the string of : show(name1) ++ "," ++ show(name2)
+-- evalAsVars :: Vars -> Table -> String 
+-- evalAsVars vars table = evalAsVars' (varsToString vars) table
 
 
-evalAsVars' :: [String] -> Table -> String
-evalAsVars' (v:[]) (Columns name (content:contents) table)   | v==name = content
-                                                             | otherwise = evalAsVars' [v] table
+-- evalAsVars' :: [String] -> Table -> String
+-- evalAsVars' (v:[]) (Columns name (content:contents) table)   | v==name = content
+--                                                              | otherwise = evalAsVars' [v] table
 
-evalAsVars' (v:[]) (Column name (content:contents))          | v==name = content
-                                                             | otherwise = ""
+-- evalAsVars' (v:[]) (Column name (content:contents))          | v==name = content
+--                                                              | otherwise = ""
 
-evalAsVars' (v:vars) (Columns name (content:contents) table) | v==name = content ++ "," ++ evalAsVars' vars table
-                                                             | otherwise = (evalAsVars' [v] table) ++ "," ++ (evalAsVars' vars (Columns name (content:contents) table))
+-- evalAsVars' (v:vars) (Columns name (content:contents) table) | v==name = content ++ "," ++ evalAsVars' vars table
+--                                                              | otherwise = (evalAsVars' [v] table) ++ "," ++ (evalAsVars' vars (Columns name (content:contents) table))
 
-evalAsVars' (v:vars) (Column name (content:contents))        | v==name = content
-                                                             | otherwise = ""
+-- evalAsVars' (v:vars) (Column name (content:contents))        | v==name = content
+--                                                              | otherwise = ""
 
 
 -- INFORMATION ABOUT THE AST, e.g the relational symbols, the amount of vars.. 
@@ -66,26 +66,30 @@ evalAsVars' (v:vars) (Column name (content:contents))        | v==name = content
 -- Get FILEPATHS , returns FILEPATHS 
 getFilePaths :: Program -> [FilePath]
 
--- Returns Designated Variables
-getVars :: Program -> [String]
-getVars (Program (FromGetExpr fromGet _)) = getVars' fromGet
 
-getVars' :: FromGet -> [String]
-getVars' (FromGet _ vars) = getVars'' vars
-getVars' (FromGetAnd _ vars _ ) = getVars'' vars
+-- Get Relations Variables!, Each variable is assigned to a column in the table! 
+getVars :: Program -> [(Relation,[String])]
 
-getVars'' :: ToGet -> [String]
-getVars'' (Params (Some s)) = [s]
-getVars'' (Params1 (Var s)) = [s]
-getVars'' (Params2 toget1 toget2) = getVars'' toget1 ++ getVars'' toget2
+-- -- Returns Designated Variables
+-- getVars :: Program -> [String] 
+-- getVars (Program (FromGetExpr fromGet _)) = getVars' fromGet
 
--- Generation of the Table Structure
-makeTable :: String -> [String]-> Int -> Table
-makeTable string vars number = makeTable' (clean (wordsWhen (==',') string)) vars number
+-- getVars' :: FromGet -> [String]
+-- getVars' (FromGet _ vars) = getVars'' vars
+-- getVars' (FromGetAnd _ vars _ ) = getVars'' vars
 
-makeTable' :: [String]-> [String] -> Int -> Table
-makeTable' (x:xs) (y:ys) number | number > 1  = Columns y [x] (makeTable' xs ys (number-1))
-makeTable' (x:xs) (y:ys) number | number == 1 = Column y [x]
+-- getVars'' :: ToGet -> [String]
+-- getVars'' (Params (Some s)) = [s]
+-- getVars'' (Params1 (Var s)) = [s]
+-- getVars'' (Params2 toget1 toget2) = getVars'' toget1 ++ getVars'' toget2
+
+-- -- Generation of the Table Structure
+-- makeTable :: String -> [String]-> Int -> Table
+-- makeTable string vars number = makeTable' (clean (wordsWhen (==',') string)) vars number
+
+-- makeTable' :: [String]-> [String] -> Int -> Table
+-- makeTable' (x:xs) (y:ys) number | number > 1  = Columns y [x] (makeTable' xs ys (number-1))
+-- makeTable' (x:xs) (y:ys) number | number == 1 = Column y [x]
 
 
 
@@ -118,21 +122,13 @@ readFiles ss = mapM readFile ss
 filepath :: String -> FilePath
 filepath s = (s ++ ".csv")
 
-
--- readFiles (s:[]) things = do relationContents <- readFile (s ++ ".csv")
---                              return things
--- readFiles (s:ss) things = do
---                              relationContents <- readFile (s ++ ".csv")
---                              readFiles ss ([relationContents])
-                      
-
 -- MAIN 
 
 main :: IO ()
 main = do
     s <- getContents
 
-    -- Assigns : ast, to the abstract syntax tree
+    -- Assigns : ast, to the abstract syntax tree generated by lexer and parser
     let ast = caca (alexScanTokens s)
 
     -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
