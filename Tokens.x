@@ -1,5 +1,5 @@
 { 
-module Main(main) where 
+module Tokens where 
 }
 
 %wrapper "basic" 
@@ -53,8 +53,8 @@ data Token =
   deriving (Eq,Show) 
 
 
-main = do 
-    smth <- getContents
-    print (alexScanTokens smth )
+--main = do 
+--    smth <- getContents
+--    print (alexScanTokens smth )
 
 }
