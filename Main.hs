@@ -1,19 +1,39 @@
 module Main where
 import Parser
 import Tokens
+import Data.Csv
 
 
-eval :: Program -> Int
-eval (Program (FromGetExpr fromGet)) = eval2 fromGet
-eval (Program (FromGetWhere fromGet eqls)) = eval2 fromGet + eval3 eqls
+eval :: Program -> String
+eval (Program s) = evalStatements s
 
-eval2 :: FromGet -> Int
-eval2 (FromGet relation toget) = 5
-eval2 (FromGetAnd relation toget fromGet) = 10 + eval2 fromGet
+evalStatements :: Statements -> String
+evalStatements (FromGetExpr fromGet _) = evalFromGet fromGet 
+eval1Statements (FromGetWhere fromGet _ _) = evalFromGet fromGet
 
-eval3 :: Equals -> Int
-eval3 (EqualVar (Var s) (Var t)) = 15
-eval3 (EqualVars (Var s) (Var t) eqls) = 20 + eval3 eqls
+evalFromGet :: FromGet -> String
+evalFromGet (FromGetAnd rel _ _) = evalRelation rel
+evalFromGet (FromGet rel toGet) = evalToGet rel toGet
+
+evalToGet :: Relation -> ToGet -> String
+evalToGet rel (Params1 s) = evalRelation rel ++ evalVar s
+
+
+evalVar :: Var -> String
+evalVar (Var a) = a
+
+evalRelation :: Relation -> String
+evalRelation (Relation s) = s ++ ".csv"
+
+--getting relation
+--getRelation :: Program -> String
+--getRelation (Program (FromGetExpr fromGet _)) = evalFG fromGet 
+--getRelation (Program (FromGetWhere fromGet _)) = evalFG fromGet 
+
+--evalFG :: FromGet -> String
+--evalFG (FromGetAnd (Relation re) _ _) = re ++ ".csv"
+--(FromGet (Relation re) toGet) = re ++ ".csv"
+
 
 
 main :: IO ()
@@ -21,3 +41,5 @@ main = do
     s <- getContents
     let ast = caca (alexScanTokens s)
     print (eval ast)
+--      result <- parseFromFile csvFile "/Users/Sarah/Desktop/PLC CW/A.csv"
+--      print result
