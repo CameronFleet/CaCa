@@ -55,13 +55,16 @@ evalAsVars' (v:vars) (Column name (content:contents))        | v==name = content
 -- INFORMATION ABOUT THE AST, e.g the relational symbols, the amount of vars.. 
 
 -- Gets A SINGLE Relational symbol
-getRelation :: Program -> String
-getRelation (Program (FromGetExpr fromGet _)) = getRelation' fromGet
-getRelation (Program (FromGetWhere fromGet _ _)) = getRelation' fromGet
+-- getRelation :: Program -> String
+-- getRelation (Program (FromGetExpr fromGet _)) = getRelation' fromGet
+-- getRelation (Program (FromGetWhere fromGet _ _)) = getRelation' fromGet
 
-getRelation' :: FromGet -> String 
-getRelation' (FromGet (Relation symbol) _) = symbol
-getRelation' (FromGetAnd (Relation symbol) _ _) = symbol
+-- getRelation' :: FromGet -> String 
+-- getRelation' (FromGet (Relation symbol) _) = symbol
+-- getRelation' (FromGetAnd (Relation symbol) _ _) = symbol
+
+-- Get FILEPATHS , returns FILEPATHS 
+getFilePaths :: Program -> [FilePath]
 
 -- Returns Designated Variables
 getVars :: Program -> [String]
@@ -100,20 +103,57 @@ clean (x:[]) = wordsWhen (=='\n') x
 clean (x:xs) = wordsWhen (=='\n') x ++ clean xs
 
 -- Acts like a SplitOn Function  , wordsWhen (==',') "This,Is,A,CSV" =====> ["This", "Is", "A" , "CSV"]
-wordsWhen     :: (Char -> Bool) -> String -> [String]
+wordsWhen :: (Char -> Bool) -> String -> [String]
 wordsWhen p s =  case dropWhile p s of
                       "" -> []
                       s' -> w : wordsWhen p s''
                             where (w, s'') = break p s'
 
 
+-- IO Functions 
+
+readFiles :: [FilePath] -> IO [String]
+readFiles ss = mapM readFile ss 
+
+filepath :: String -> FilePath
+filepath s = (s ++ ".csv")
+
+
+-- readFiles (s:[]) things = do relationContents <- readFile (s ++ ".csv")
+--                              return things
+-- readFiles (s:ss) things = do
+--                              relationContents <- readFile (s ++ ".csv")
+--                              readFiles ss ([relationContents])
+                      
+
 -- MAIN 
 
 main :: IO ()
 main = do
     s <- getContents
+
+    -- Assigns : ast, to the abstract syntax tree
     let ast = caca (alexScanTokens s)
 
-    relationContents <- readFile (getRelation ast ++ ".csv")
-    print (eval ast (makeTable relationContents (getVars ast) (length (getVars ast))))
+    -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
+    -- then relationContents will be = ["hi,bye", "low,high"]
+    -- TODO: make getFilePaths         ; Will navigate the ast to fine any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
+    relationContents <- readFiles (getFilePaths ast)
+
+    -- Assigns : tables, to be the table containing all info needed to parse correctly. e.g if the files above are name with variable names
+    --  A(x1,x2) and B(x3,x4) then Tables will be the following
+    -- [(Relation "A", Columns x1 ["hi"] (Column x2 ["bye"])), (Relation "B", Columns x3 ["low"] (Column x4 ["high"]))]
+    -- TODO: make makeTables.          ; Should generate of type Tables. 
+    -- TODO: re-make getVars.          ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
+    let tables = makeTables relationContents (getVars ast)
+
+
+    -- Prints : the full evaluation, eval ast tables for any given program defined by our BNF should produce the desired result with proper error handling.
+    -- TODO: FromGetWhere and FromGet. ; Basics, get this working.
+    -- TODO: FromGet and FromGetAnd.   ; Basics, get this working.
+    -- TODO: AsVars and Equals.        ; Basics, get this working. AsVars is probably where the final printing occurs. (Maybe even all printing?)
+    -- TODO: ToGet and Vars.           ; Simple. 
+    -- TODO: Some                      ; This is probably going to be very Hard! And will probably make it very hard
+    print (eval ast tables)
+
 
