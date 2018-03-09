@@ -30,8 +30,8 @@ import Tokens
 
 Program : start Statements end { Program $2}
 
-Statements : FromGet ';' as Vars                       { FromGetExpr $1 }
-           | FromGet ';' where '{' Equals '}' as Vars  { FromGetWhere $1 $5}
+Statements : FromGet ';' as Vars                       { FromGetExpr $1 $4}
+           | FromGet ';' where '{' Equals '}' as Vars  { FromGetWhere $1 $5 $8}
 
 FromGet : from Relation get ToGet and FromGet          { FromGetAnd $2 $4 $6}   
         | from Relation get ToGet                      { FromGet $2 $4}
@@ -56,8 +56,8 @@ parseError _ = error "Parse error"
 
 data Program = Program Statements deriving Show
 
-data Statements = FromGetExpr FromGet
-                | FromGetWhere FromGet Equals deriving Show
+data Statements = FromGetExpr FromGet Vars
+                | FromGetWhere FromGet Equals Vars deriving Show
 
 data FromGet = FromGetAnd Relation ToGet FromGet
              | FromGet Relation ToGet deriving Show
