@@ -4,18 +4,6 @@ import Tokens
 import Control.Monad
 import Data.Char
 
-
--- A.csv CC, Sasa
--- Columns varName ["CC"] (Column varName ["Sasa"])
-
--- B.csv 1,2,3 
--- Columns (Info "1", Columns ( Info "2" , (Column (Info "3"))))
-
-
--- C.csv 1,2,3 \n 4,5,6
--- Columns (MoreInfo ("1", (Info "4")), Columns ( MoreInfo ("2", (Info "5")), (Column (MoreInfo ("3", (Info "6"))))))
-
-
 -- Type of all of the Relations and their corrosponding Tables 
 type Tables = [(Relation, Table)]
 
@@ -51,7 +39,6 @@ data Table = Column String [String] | Columns String [String] Table deriving Sho
 -- evalAsVars' (v:vars) (Column name (content:contents))        | v==name = content
 --                                                              | otherwise = ""
 
-
 -- INFORMATION ABOUT THE AST, e.g the relational symbols, the amount of vars.. 
 
 -- Gets A SINGLE Relational symbol
@@ -69,8 +56,15 @@ getFilePaths :: Program -> [FilePath]
 
 -- Get Relations Variables!, Each variable is assigned to a column in the table! 
 getVars :: Program -> [(Relation,[String])]
+getVars (Program _ ) = []
 
--- -- Returns Designated Variables
+-- Generate the Tables. 
+-- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
+-- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
+makeTables :: [String] -> [(Relation,[String])] -> Tables 
+makeTables _ _ = []
+
+-- Returns Designated Variables
 -- getVars :: Program -> [String] 
 -- getVars (Program (FromGetExpr fromGet _)) = getVars' fromGet
 
@@ -93,7 +87,7 @@ getVars :: Program -> [(Relation,[String])]
 
 
 
--- AUX 
+-- ================================================================  AUX  ===========================================================================================
 
 -- Turns the Data Type:  Vars ====> [String] ; Retains order
 varsToString :: Vars -> [String]
