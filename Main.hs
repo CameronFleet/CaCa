@@ -14,7 +14,13 @@ data Table = Column String [String] | Columns String [String] Table deriving Sho
 -- ================================================================  EVAL  ============================================================================================
 eval :: Program -> Tables -> String
 eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
-eval (Program (FromGetWhere fromGet equals vars)) tables = ""
+eval (Program (FromGetWhere fromGet equals vars)) tables = evalFromGetWhere fromGet equals vars tables
+
+evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
+
+evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
+
+
 
 -- =============================================================  TABLE MAKERS  =======================================================================================
 
@@ -64,9 +70,9 @@ makeTable' _ _ = error "There should be an error here"
 -- ================================================================  AUX  =============================================================================================
 
 -- Turns the Data Type:  Vars ====> [String] ; Retains order
-varsToString :: Vars -> [String]
-varsToString (Vars1 (Var s)) = [s]
-varsToString (Vars2 (Var s) vars) = [s] ++ (varsToString vars)
+varsToString :: AsVars -> [String]
+varsToString (AsVar (Var s)) = [s]
+varsToString (AsVars (Var s) asVars) = [s] ++ (varsToString asVars)
 
 -- "hi,bye" to [["hi"], ["bye"]]; "hi,bye\n zdraveyte,chao" to [["hi","zdraveyte"],["bye", "chao"]]
 splitContents :: String -> [[String]]
