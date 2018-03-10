@@ -22,9 +22,8 @@ evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
 evalFromGetExpr _ asVars tables = evalAsVars asVars tables
 
 -- Checks if the list of all Variables in Table, e.g ["x1","x2","x3"] (Those defined in fromgets)
--- TODO: Change getTableVars to not include dupelicates
 evalAsVars :: AsVars -> Tables -> String
-evalAsVars asVars tables | equalList (getTablesVars tables) (asVarsToString asVars) = printAsVars (asVarsToString asVars) tables
+evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (asVarsToString asVars) = printAsVars (asVarsToString asVars) tables
                          | otherwise = error "All Variables should be declared as AS Vars"
 
 -- ============================================================  EVALASVAR AUX  ========================================================================================
@@ -34,13 +33,14 @@ getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
 getNextAndCombine combinations ((_,table):[]) = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
 getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
 
--- TODO:  make areDuplicateVars tables ==> return true if there are vars with the same values 
 printAsVars :: [String] -> Tables -> String
 printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (smth (getNextAndCombine [[]] tables)))
                           | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
 
+-- TODO: Make this function
 smth :: [[(String,String)]] -> [[(String,String)]]
-                    
+smth m = m
+                  
 -- Parameter $1: all Rows in form (Variable, Content) so e.g if r1 x1, (Row 1, Column x1) contains "Hello" then this will be [("x1", "Hello")]
 -- Parameter $2: the AsVar variables e.g in the form such ["x1","x4","x2","x3"] denotes the printing out in this order                                 
 orderAs :: [String] -> [(String, String)] -> String 
@@ -61,6 +61,11 @@ getTablesVars ((_, table):tables) = (getTableVars table) ++ (getTablesVars table
 getTableVars :: Table -> [String]
 getTableVars (Column var _) = [var]
 getTableVars (Columns var _ table) = [var] ++ (getTableVars table)
+
+areDuplicateVars :: Tables -> Bool
+areDuplicateVars tables | (length tableVars) == (length (removeDuplicates tableVars)) = False
+                        | otherwise = True
+                        where tableVars = getTablesVars tables
 
 -- returns the Row of a given index in a table in form [(column, content)]
 getRow :: Table -> Int -> [(String, String)]
@@ -125,9 +130,13 @@ asVarsToString :: AsVars -> [String]
 asVarsToString (AsVar (Var s)) = [s]
 asVarsToString (AsVars (Var s) asVars) = [s] ++ (asVarsToString asVars)
 
-
 equalList :: [String] -> [String] -> Bool
 equalList x y = null (x \\ y) && null (y \\ x)
+
+removeDuplicates :: [String] -> [String]
+removeDuplicates [] = []
+removeDuplicates (x:xs) | x `elem` xs = removeDuplicates xs
+                        | otherwise   = x:(removeDuplicates xs) 
 
 -- "hi,bye" to [["hi"], ["bye"]]; "hi,bye\n zdraveyte,chao" to [["hi","zdraveyte"],["bye", "chao"]]
 splitContents :: String -> [[String]]
