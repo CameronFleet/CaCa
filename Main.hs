@@ -12,11 +12,12 @@ data Table = Column String [String] | Columns String [String] Table deriving Sho
 
 
 -- ================================================================  EVAL  ============================================================================================
--- eval :: Program -> Table -> String
--- eval (Program (FromGetExpr fromGet vars)) table = evalFromGetExpr fromGet vars table
--- eval (Program (FromGetWhere fromGet equals vars)) _ = ""
+eval :: Program -> Tables -> String
+eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
+eval (Program (FromGetWhere fromGet equals vars)) tables = ""
 
 -- =============================================================  TABLE MAKERS  =======================================================================================
+
 -- Get FILEPATHS , returns FILEPATHS 
 getFilePaths :: Program -> [FilePath]
 getFilePaths (Program (FromGetExpr fromGet _)) = getFilePaths' fromGet
@@ -42,7 +43,6 @@ getVars' (FromGet relation toGet) = [(relation, (listVarsToGet toGet))]
 listVarsToGet :: ToGet -> [String]
 listVarsToGet (Params1(Var v)) = [v]
 listVarsToGet (Params2 toGet toGet1) = listVarsToGet toGet ++ listVarsToGet toGet1
-
 
 -- Generate the Tables. 
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
@@ -111,14 +111,14 @@ main = do
 
     -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
     -- then relationContents will be = ["hi,bye", "low,high"]
-    -- TODO: make getFilePaths         ; Will navigate the ast to find any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
+    -- getFilePaths         ; Will navigate the ast to find any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
     relationContents <- readFiles (getFilePaths ast)
 
     -- Assigns : tables, to be the table containing all info needed to parse correctly. e.g if the files above are name with variable names
     --  A(x1,x2) and B(x3,x4) then Tables will be the following
     -- [(Relation "A", Columns x1 ["hi"] (Column x2 ["bye"])), (Relation "B", Columns x3 ["low"] (Column x4 ["high"]))]
-    -- TODO: make makeTables.          ; Should generate of type Tables. 
-    -- TODO: re-make getVars.          ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
+    -- makeTables.          ; Should generate of type Tables. 
+    -- getVars.             ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
     let tables = makeTables relationContents (getVars ast)
     print (tables)
 
