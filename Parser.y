@@ -43,8 +43,9 @@ ToGet : Some                                             { Params $1}
       | Var                                              { Params1 $1}
       | ToGet ',' ToGet                                  { Params2 $1 $3}
 
-Vars : Var                                               { Vars1 $1}
-     | Var ',' Vars                                      { Vars2 $1 $3}
+AsVars : Var                                               { AsVar $1}
+       | Var ',' AsVars                                    { AsVars $1 $3}
+
 
 Some     : some string { Some $2 }
 Var      : string      { Var $1 }
@@ -56,8 +57,8 @@ parseError _ = error "Parse error"
 
 data Program = Program Statements deriving Show
 
-data Statements = FromGetExpr FromGet Vars
-                | FromGetWhere FromGet Equals Vars deriving Show
+data Statements = FromGetExpr FromGet AsVars
+                | FromGetWhere FromGet Equals AsVars deriving Show
 
 data FromGet = FromGetAnd Relation ToGet FromGet
              | FromGet Relation ToGet deriving Show
@@ -70,7 +71,8 @@ data ToGet = Params Some
            | Params2 ToGet ToGet deriving Show
 
 data AsVars = AsVar Var 
-            | AsVars Var Vars deriving Show
+            | AsVars Var AsVars deriving Show
+
 
 data Some = Some String deriving Show
 data Var =  Var String deriving Show

@@ -3,20 +3,94 @@ import Parser
 import Tokens
 import Control.Monad
 import Data.Char
+import Data.List
+import Data.List
 
--- Type of all of the Relations and their corrosponding Tables 
-type Tables = [(Relation, Table)]
+-- Type of all of the Relations and their corrosponding Tables; what for?
+-- Realtion == Relation "A" aka table for A.csv
+type Tables = [(Relation, Table)] 
 
 -- Representation of all the information for a single Relational Symbol
-data Table = Column String [String] | Columns String [String] Table deriving Show
+data Table = Column String [String] | Columns String [String] Table deriving (Show, Eq)
 
 
 -- ================================================================  EVAL  ============================================================================================
--- eval :: Program -> Table -> String
--- eval (Program (FromGetExpr fromGet vars)) table = evalFromGetExpr fromGet vars table
--- eval (Program (FromGetWhere fromGet equals vars)) _ = ""
+eval :: Program -> Tables -> String
+eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
+eval (Program (FromGetWhere fromGet equals vars)) tables = ""
+
+evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
+evalFromGetExpr _ asVars tables = evalAsVars asVars tables
+
+-- Checks if the list of all Variables in Table, e.g ["x1","x2","x3"] (Those defined in fromgets)
+-- TODO: Change getTableVars to not include dupelicates
+evalAsVars :: AsVars -> Tables -> String
+evalAsVars asVars tables | equalList (getTablesVars tables) (asVarsToString asVars) = printAsVars (asVarsToString asVars) tables
+                         | otherwise = error "All Variables should be declared as AS Vars"
+
+-- ============================================================  EVALASVAR AUX  ========================================================================================
+
+-- getting the next table and making the combinations with the curr
+getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
+getNextAndCombine combinations ((_,table):[]) = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
+getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
+
+-- TODO:  make areDuplicateVars tables ==> return true if there are vars with the same values 
+printAsVars :: [String] -> Tables -> String
+printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (keepRowsWithDup (getNextAndCombine [[]] tables)))
+                          | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
+
+-- keeping the rows that have duplicates
+keepRowsWithDup :: [[(String,String)]] -> [[(String,String)]]
+keepRowsWithDup combinations = [ c | c <- combinations, duplicates c]
+
+-- if anything is true => theres is a duplicate
+duplicates :: (Eq a) => [a] -> Bool
+duplicates []     = False
+duplicates (x:xs) = x `elem` xs || duplicates xs
+
+-- if there is a duplicate var:
+areDuplicateVars :: Tables -> Bool
+areDuplicateVars tables | duplicates (getTablesVars tables) = True
+                        | otherwise = False
+
+-- checking whether vars contain duplicates
+-- areDuplicateVars :: Tables -> Bool
+-- areDuplicateVars table
+                    
+-- Parameter $1: all Rows in form (Variable, Content) so e.g if r1 x1, (Row 1, Column x1) contains "Hello" then this will be [("x1", "Hello")]
+-- Parameter $2: the AsVar variables e.g in the form such ["x1","x4","x2","x3"] denotes the printing out in this order                                 
+orderAs :: [String] -> [(String, String)] -> String 
+orderAs (asVar:[]) vcs = orderAs' vcs asVar ++ "\n"
+orderAs (asVar:asVars) vcs = (orderAs' vcs asVar) ++ "," ++ orderAs asVars vcs
+
+orderAs' :: [(String, String)] -> String -> String
+orderAs' []  _ = error "smth went wrong"
+orderAs' ((var,content):vcs) v  | v == var = content
+                                | otherwise = orderAs' vcs v
+
+-- ==========================================================  TABLE MANIPULATORS  ====================================================================================
+
+getTablesVars :: Tables -> [String]
+getTablesVars ((_, table):[]) = getTableVars table
+getTablesVars ((_, table):tables) = (getTableVars table) ++ (getTablesVars tables)
+
+getTableVars :: Table -> [String]
+getTableVars (Column var _) = [var]
+getTableVars (Columns var _ table) = [var] ++ (getTableVars table)
+
+-- returns the Row of a given index in a table in form [(column, content)]
+getRow :: Table -> Int -> [(String, String)]
+getRow (Column var cs) index        = [(var,cs!!index)]
+getRow (Columns var cs table) index = [(var,cs!!index)] ++ (getRow table index)
+
+-- returns the number of rows in a given table
+getNumberOfRows :: Table -> Int
+getNumberOfRows (Columns var [] table) = 0
+getNumberOfRows (Columns var (c:cs) table) = 1 + getNumberOfRows (Columns var (cs) table)
 
 -- =============================================================  TABLE MAKERS  =======================================================================================
+
 -- Get FILEPATHS , returns FILEPATHS 
 getFilePaths :: Program -> [FilePath]
 getFilePaths (Program (FromGetExpr fromGet _)) = getFilePaths' fromGet
@@ -43,7 +117,6 @@ listVarsToGet :: ToGet -> [String]
 listVarsToGet (Params1(Var v)) = [v]
 listVarsToGet (Params2 toGet toGet1) = listVarsToGet toGet ++ listVarsToGet toGet1
 
-
 -- Generate the Tables. 
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
 -- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
@@ -56,21 +129,28 @@ makeTable :: String -> [String] -> Table
 makeTable content vars = makeTable' (splitContents content) vars
 
 makeTable' :: [[String]] -> [String] -> Table
+makeTable' [] (v:[]) = Column v []
+makeTable' [] (v:vars) = Columns v [] (makeTable' [] vars)
 makeTable' (c:[]) (v:[]) = Column v c
 makeTable' (c:content) (v:vars) = Columns v c (makeTable' content vars)
 makeTable' _ _ = error "There should be an error here"
 
-
 -- ================================================================  AUX  =============================================================================================
 
 -- Turns the Data Type:  Vars ====> [String] ; Retains order
-varsToString :: Vars -> [String]
-varsToString (Vars1 (Var s)) = [s]
-varsToString (Vars2 (Var s) vars) = [s] ++ (varsToString vars)
+asVarsToString :: AsVars -> [String]
+asVarsToString (AsVar (Var s)) = [s]
+asVarsToString (AsVars (Var s) asVars) = [s] ++ (asVarsToString asVars)
+
+
+equalList :: [String] -> [String] -> Bool
+equalList x y = null (x \\ y) && null (y \\ x)
 
 -- "hi,bye" to [["hi"], ["bye"]]; "hi,bye\n zdraveyte,chao" to [["hi","zdraveyte"],["bye", "chao"]]
 splitContents :: String -> [[String]]
-splitContents s = splitContents'' (splitContents' (wordsWhen (=='\n') s))
+splitContents s | length s == 0 = []
+                | s == "\n" = []
+                | otherwise = splitContents'' (splitContents' (wordsWhen (=='\n') s))
 
 splitContents' :: [String] -> [[String]]
 splitContents' (s:[]) = [(wordsWhen (==',') s)]
@@ -111,6 +191,8 @@ main = do
 
     -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
     -- then relationContents will be = ["hi,bye", "low,high"]
+    -- getFilePaths         ; Will navigate the ast to find any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
+
     relationContents <- readFiles (getFilePaths ast)
 
     -- Assigns : tables, to be the table containing all info needed to parse correctly. e.g if the files above are name with variable names
@@ -122,8 +204,9 @@ main = do
 
 
     -- TODO: re-make getVars.          ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
+    -- makeTables.          ; Should generate of type Tables. 
+    -- getVars.             ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
     let tables = makeTables relationContents (getVars ast)
-    print (tables)
 
 
     -- Prints : the full evaluation, eval ast tables for any given program defined by our BNF should produce the desired result with proper error handling.
@@ -132,5 +215,5 @@ main = do
     -- TODO: AsVars and Equals.        ; Basics, get this working. AsVars is probably where the final printing occurs. (Maybe even all printing?)
     -- TODO: ToGet and Vars.           ; Simple. 
     -- TODO: Some                      ; This is probably going to be very Hard! And will probably make it very hard
---    print (eval ast tables)
+    putStr (eval ast tables)
 
