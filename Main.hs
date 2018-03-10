@@ -48,7 +48,17 @@ listVarsToGet (Params2 toGet toGet1) = listVarsToGet toGet ++ listVarsToGet toGe
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
 -- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
 makeTables :: [String] -> [(Relation,[String])] -> Tables 
-makeTables _ _ = []
+makeTables (content:[]) ((relation, vars):[]) = [(relation, (makeTable content vars))]
+makeTables (content:contents) ((relation, vars):ys) = [(relation, (makeTable content vars))] ++ (makeTables contents ys)
+makeTables _ _ = error "There should be an error here"
+
+makeTable :: String -> [String] -> Table
+makeTable content vars = makeTable' (splitContents content) vars
+
+makeTable' :: [[String]] -> [String] -> Table
+makeTable' (c:[]) (v:[]) = Column v c
+makeTable' (c:content) (v:vars) = Columns v c (makeTable' content vars)
+makeTable' _ _ = error "There should be an error here"
 
 
 -- ================================================================  AUX  =============================================================================================
@@ -58,6 +68,17 @@ varsToString :: Vars -> [String]
 varsToString (Vars1 (Var s)) = [s]
 varsToString (Vars2 (Var s) vars) = [s] ++ (varsToString vars)
 
+-- "hi,bye" to [["hi"], ["bye"]]; "hi,bye\n zdraveyte,chao" to [["hi","zdraveyte"],["bye", "chao"]]
+splitContents :: String -> [[String]]
+splitContents s = splitContents'' (splitContents' (wordsWhen (=='\n') s))
+
+splitContents' :: [String] -> [[String]]
+splitContents' (s:[]) = [(wordsWhen (==',') s)]
+splitContents' (s:ss) = [(wordsWhen (==',') s)] ++ splitContents' ss
+
+splitContents'' :: [[String]] -> [[String]]
+splitContents'' ([]:xs) = []
+splitContents'' ss = [map head ss] ++ splitContents'' (map tail ss)
 
 -- Takes a list of CSV e.g : ["Bob", "Alice", "John\n"]  ====> ["Bob", "Alice", "John"]
 clean :: [String] -> [String]
@@ -92,15 +113,14 @@ main = do
     -- then relationContents will be = ["hi,bye", "low,high"]
     -- TODO: make getFilePaths         ; Will navigate the ast to find any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
     relationContents <- readFiles (getFilePaths ast)
-    print (getVars ast)
 
     -- Assigns : tables, to be the table containing all info needed to parse correctly. e.g if the files above are name with variable names
     --  A(x1,x2) and B(x3,x4) then Tables will be the following
     -- [(Relation "A", Columns x1 ["hi"] (Column x2 ["bye"])), (Relation "B", Columns x3 ["low"] (Column x4 ["high"]))]
     -- TODO: make makeTables.          ; Should generate of type Tables. 
     -- TODO: re-make getVars.          ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
- --   let tables = makeTables relationContents (getVars ast)
-
+    let tables = makeTables relationContents (getVars ast)
+    print (tables)
 
     -- Prints : the full evaluation, eval ast tables for any given program defined by our BNF should produce the desired result with proper error handling.
     -- TODO: FromGetWhere and FromGet. ; Basics, get this working.
