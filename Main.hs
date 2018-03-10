@@ -3,8 +3,10 @@ import Parser
 import Tokens
 import Control.Monad
 import Data.Char
+import Data.List
 
--- Type of all of the Relations and their corrosponding Tables 
+-- Type of all of the Relations and their corrosponding Tables; what for?
+-- Realtion == Relation "A" aka table for A.csv
 type Tables = [(Relation, Table)]
 
 -- Representation of all the information for a single Relational Symbol
@@ -14,13 +16,61 @@ data Table = Column String [String] | Columns String [String] Table deriving Sho
 -- ================================================================  EVAL  ============================================================================================
 eval :: Program -> Tables -> String
 eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
-eval (Program (FromGetWhere fromGet equals vars)) tables = evalFromGetWhere fromGet equals vars tables
+eval (Program (FromGetWhere fromGet equals vars)) tables = ""
 
 evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
+evalFromGetExpr _ asVars tables = evalAsVars asVars tables
 
-evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
+-- Checks if the list of all Variables in Table, e.g ["x1","x2","x3"] (Those defined in fromgets)
+-- TODO: Change getTableVars to not include dupelicates
+evalAsVars :: AsVars -> Tables -> String
+evalAsVars asVars tables | equalList (getTablesVars tables) (asVarsToString asVars) = printAsVars (asVarsToString asVars) tables
+                         | otherwise = error "All Variables should be declared as AS Vars"
 
+-- ============================================================  EVALASVAR AUX  ========================================================================================
 
+-- getting the next table and making the combinations with the curr
+getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
+getNextAndCombine combinations ((_,table):[]) = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
+getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
+
+-- TODO:  make areDuplicateVars tables ==> return true if there are vars with the same values 
+printAsVars :: [String] -> Tables -> String
+printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (smth (getNextAndCombine [[]] tables)))
+                          | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
+
+smth :: [[(String,String)]] -> [[(String,String)]]
+                    
+-- Parameter $1: all Rows in form (Variable, Content) so e.g if r1 x1, (Row 1, Column x1) contains "Hello" then this will be [("x1", "Hello")]
+-- Parameter $2: the AsVar variables e.g in the form such ["x1","x4","x2","x3"] denotes the printing out in this order                                 
+orderAs :: [String] -> [(String, String)] -> String 
+orderAs (asVar:[]) vcs = orderAs' vcs asVar ++ "\n"
+orderAs (asVar:asVars) vcs = (orderAs' vcs asVar) ++ "," ++ orderAs asVars vcs
+
+orderAs' :: [(String, String)] -> String -> String
+orderAs' []  _ = error "smth went wrong"
+orderAs' ((var,content):vcs) v  | v == var = content
+                                | otherwise = orderAs' vcs v
+
+-- ==========================================================  TABLE MANIPULATORS  ====================================================================================
+
+getTablesVars :: Tables -> [String]
+getTablesVars ((_, table):[]) = getTableVars table
+getTablesVars ((_, table):tables) = (getTableVars table) ++ (getTablesVars tables)
+
+getTableVars :: Table -> [String]
+getTableVars (Column var _) = [var]
+getTableVars (Columns var _ table) = [var] ++ (getTableVars table)
+
+-- returns the Row of a given index in a table in form [(column, content)]
+getRow :: Table -> Int -> [(String, String)]
+getRow (Column var cs) index        = [(var,cs!!index)]
+getRow (Columns var cs table) index = [(var,cs!!index)] ++ (getRow table index)
+
+-- returns the number of rows in a given table
+getNumberOfRows :: Table -> Int
+getNumberOfRows (Columns var [] table) = 0
+getNumberOfRows (Columns var (c:cs) table) = 1 + getNumberOfRows (Columns var (cs) table)
 
 -- =============================================================  TABLE MAKERS  =======================================================================================
 
@@ -62,21 +112,28 @@ makeTable :: String -> [String] -> Table
 makeTable content vars = makeTable' (splitContents content) vars
 
 makeTable' :: [[String]] -> [String] -> Table
+makeTable' [] (v:[]) = Column v []
+makeTable' [] (v:vars) = Columns v [] (makeTable' [] vars)
 makeTable' (c:[]) (v:[]) = Column v c
 makeTable' (c:content) (v:vars) = Columns v c (makeTable' content vars)
 makeTable' _ _ = error "There should be an error here"
 
-
 -- ================================================================  AUX  =============================================================================================
 
 -- Turns the Data Type:  Vars ====> [String] ; Retains order
-varsToString :: AsVars -> [String]
-varsToString (AsVar (Var s)) = [s]
-varsToString (AsVars (Var s) asVars) = [s] ++ (varsToString asVars)
+asVarsToString :: AsVars -> [String]
+asVarsToString (AsVar (Var s)) = [s]
+asVarsToString (AsVars (Var s) asVars) = [s] ++ (asVarsToString asVars)
+
+
+equalList :: [String] -> [String] -> Bool
+equalList x y = null (x \\ y) && null (y \\ x)
 
 -- "hi,bye" to [["hi"], ["bye"]]; "hi,bye\n zdraveyte,chao" to [["hi","zdraveyte"],["bye", "chao"]]
 splitContents :: String -> [[String]]
-splitContents s = splitContents'' (splitContents' (wordsWhen (=='\n') s))
+splitContents s | length s == 0 = []
+                | s == "\n" = []
+                | otherwise = splitContents'' (splitContents' (wordsWhen (=='\n') s))
 
 splitContents' :: [String] -> [[String]]
 splitContents' (s:[]) = [(wordsWhen (==',') s)]
@@ -126,7 +183,6 @@ main = do
     -- makeTables.          ; Should generate of type Tables. 
     -- getVars.             ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
     let tables = makeTables relationContents (getVars ast)
-    print (tables)
 
     -- Prints : the full evaluation, eval ast tables for any given program defined by our BNF should produce the desired result with proper error handling.
     -- TODO: FromGetWhere and FromGet. ; Basics, get this working.
@@ -134,5 +190,5 @@ main = do
     -- TODO: AsVars and Equals.        ; Basics, get this working. AsVars is probably where the final printing occurs. (Maybe even all printing?)
     -- TODO: ToGet and Vars.           ; Simple. 
     -- TODO: Some                      ; This is probably going to be very Hard! And will probably make it very hard
---    print (eval ast tables)
+    putStr (eval ast tables)
 
