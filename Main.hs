@@ -90,7 +90,6 @@ main = do
 
     -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
     -- then relationContents will be = ["hi,bye", "low,high"]
-    -- TODO: make getFilePaths         ; Will navigate the ast to find any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
     relationContents <- readFiles (getFilePaths ast)
     print (getVars ast)
 
@@ -98,7 +97,6 @@ main = do
     --  A(x1,x2) and B(x3,x4) then Tables will be the following
     -- [(Relation "A", Columns x1 ["hi"] (Column x2 ["bye"])), (Relation "B", Columns x3 ["low"] (Column x4 ["high"]))]
     -- TODO: make makeTables.          ; Should generate of type Tables. 
-    -- TODO: re-make getVars.          ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
  --   let tables = makeTables relationContents (getVars ast)
 
 
