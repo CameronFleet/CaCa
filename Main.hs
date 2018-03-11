@@ -24,15 +24,16 @@ evalFromGetExpr _ asVars tables = evalAsVars asVars tables
 
 -- TODO: make a function that converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4; Can be in AUX
 evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
-evalFromGetWhere _ equals asVars tables = evalAsVars' asVars (convertEquals equals) tables
+evalFromGetWhere _ equals asVars tables = evalAsVars' asVars equals tables
 
 -- Checks if the list of all Variables in Table, e.g ["x1","x2","x3"] (Those defined in fromgets)
 evalAsVars :: AsVars -> Tables -> String
-evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (asVarsToString asVars) = printAsVars (asVarsToString asVars) tables
+evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars (convertAsVars asVars) tables
                          | otherwise = error "All Variables should be declared as AS Vars"
 
--- TODO: Do exactly the same as above but printAsVars' should also take in [(String,String)]
-evalAsVars' :: AsVars -> [(String,String)] -> Tables -> String
+evalAsVars' :: AsVars -> Equals -> Tables -> String
+evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars' (convertAsVars asVars) (convertEquals equals) tables
+                                 | otherwise = error "All Variables should be declared as AS Vars"
 
 -- ============================================================  EvalAsVar AUX  ========================================================================================
 
@@ -151,9 +152,9 @@ makeTable' _ _ = error "There should be an error here"
 -- ================================================================  AUX  =============================================================================================
 
 -- Turns the Data Type:  Vars ====> [String] ; Retains order
-asVarsToString :: AsVars -> [String]
-asVarsToString (AsVar (Var s)) = [s]
-asVarsToString (AsVars (Var s) asVars) = [s] ++ (asVarsToString asVars)
+convertAsVars :: AsVars -> [String]
+convertAsVars (AsVar (Var s)) = [s]
+convertAsVars (AsVars (Var s) asVars) = [s] ++ (convertAsVars asVars)
 
 equalList :: [String] -> [String] -> Bool
 equalList x y = null (x \\ y) && null (y \\ x)
