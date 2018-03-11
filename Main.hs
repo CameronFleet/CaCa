@@ -42,8 +42,8 @@ printAsVars :: [String] -> Tables -> String
 printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (keepRowsWithDup (getNextAndCombine [[]] tables)))
                           | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
 
--- TODO: Do exactly the same as printAsVars but only keep those rows where the variables in [(String,String)] are equal! 
-printAsVars' :: [String] -> [(String,String)] -> Tables -> String
+-- -- TODO: Do exactly the same as printAsVars but only keep those rows where the variables in [(String,String)] are equal! 
+-- printAsVars' :: [String] -> [(String,String)] -> Tables -> String
 
 -- getting the next table and making the combinations with the curr
 getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
@@ -156,6 +156,15 @@ makeTable' _ _ = error "There should be an error here"
 convertAsVars :: AsVars -> [String]
 convertAsVars (AsVar (Var s)) = [s]
 convertAsVars (AsVars (Var s) asVars) = [s] ++ (convertAsVars asVars)
+
+-- converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4
+convertEquals :: Equals -> [(String,String)]
+convertEquals (EqualVar var1 var2) = [(getStringVar var1, getStringVar var2)] 
+convertEquals (EqualVars var1 var2 eq) = [(getStringVar var1, getStringVar var2)] ++ (convertEquals eq) 
+
+-- takes the sting part of the Var: Var "x1" = "x1"
+getStringVar :: Var -> String
+getStringVar (Var v) = v
 
 equalList :: [String] -> [String] -> Bool
 equalList x y = null (x \\ y) && null (y \\ x)
