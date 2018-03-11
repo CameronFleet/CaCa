@@ -22,7 +22,7 @@ eval (Program (FromGetWhere fromGet equals vars)) tables = evalFromGetWhere from
 evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
 evalFromGetExpr _ asVars tables = evalAsVars asVars tables
 
--- TODO: make a function that converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4; Can be in AUX
+
 evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
 evalFromGetWhere _ equals asVars tables = evalAsVars' asVars equals tables
 
@@ -31,6 +31,7 @@ evalAsVars :: AsVars -> Tables -> String
 evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars (convertAsVars asVars) tables
                          | otherwise = error "All Variables should be declared as AS Vars"
 
+-- TODO: make a 'convertEquals' function that converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4; Can be in AUX
 evalAsVars' :: AsVars -> Equals -> Tables -> String
 evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars' (convertAsVars asVars) (convertEquals equals) tables
                                  | otherwise = error "All Variables should be declared as AS Vars"
@@ -216,26 +217,18 @@ main = do
     -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
     -- then relationContents will be = ["hi,bye", "low,high"]
     -- getFilePaths         ; Will navigate the ast to find any and all declarations of: from A, from B and produce [FilePath]: ["A.csv", "B.csv"]
-
     relationContents <- readFiles (getFilePaths ast)
 
     -- Assigns : tables, to be the table containing all info needed to parse correctly. e.g if the files above are name with variable names
     --  A(x1,x2) and B(x3,x4) then Tables will be the following
     -- [(Relation "A", Columns x1 ["hi"] (Column x2 ["bye"])), (Relation "B", Columns x3 ["low"] (Column x4 ["high"]))]
-    -- TODO: make makeTables.          ; Should generate of type Tables. 
-
- --   let tables = makeTables relationContents (getVars ast)
-
-
-    -- TODO: re-make getVars.          ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
     -- makeTables.          ; Should generate of type Tables. 
     -- getVars.             ; Must include to which Relation each variable is related to, so maybe [(Relation "A", ["x1","x2"]), (Relation "B", ["x3","x4"])]
     let tables = makeTables relationContents (getVars ast)
 
 
     -- Prints : the full evaluation, eval ast tables for any given program defined by our BNF should produce the desired result with proper error handling.
-    -- TODO: FromGetWhere and FromGet. ; Basics, get this working.
-    -- TODO: FromGet and FromGetAnd.   ; Basics, get this working.
+    -- FromGetWhere and FromGet. ; Basics, get this working.
     -- TODO: AsVars and Equals.        ; Basics, get this working. AsVars is probably where the final printing occurs. (Maybe even all printing?)
     -- TODO: ToGet and Vars.           ; Simple. 
     -- TODO: Some                      ; This is probably going to be very Hard! And will probably make it very hard
