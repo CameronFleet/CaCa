@@ -38,12 +38,38 @@ evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars ta
 
 -- ============================================================  EvalAsVar AUX  ========================================================================================
 
+-- =========== EVAL FROM GET WHERE
+-- TODO: Do exactly the same as printAsVars but only keep those rows where the variables in [(String,String)] are equal! 
+printAsVars' :: [String] -> [(String,String)] -> Tables -> String
+printAsVars' asVars equals tables | areDuplicateVars tables = concat ( map (orderAs asVars) outputRowsDupEqVars)
+                                  | otherwise               = concat ( map (orderAs asVars) outputRowsEqVars)
+                                  where outputRowsEqVars = (keepRowsWithEqVars (getNextAndCombine [[]] tables) equals)
+                                        outputRowsDupEqVars = (keepRowsWithDup outputRowsEqVars)
+
+keepRowsWithEqVars :: [[(String,String)]] -> [(String,String)] -> [[(String,String)]]
+keepRowsWithEqVars rows (eq:[])  = rowsEqVars rows eq
+keepRowsWithEqVars rows (eq:eqs) = keepRowsWithEqVars (rowsEqVars rows eq) eqs 
+
+rowsEqVars :: [[(String,String)]] -> (String, String) -> [[(String, String)]]
+rowsEqVars rows equal = [r | r <- rows, eqVars r equal]
+
+eqVars :: [(String,String)] -> (String,String) -> Bool
+eqVars rows (eqVar1, eqVar2) | equalList contentVar1 contentVar2 = True
+                             | otherwise = False
+                              where contentVar1 = removeDuplicates (eqVars' rows eqVar1) 
+                                    contentVar2 = removeDuplicates (eqVars' rows eqVar2)
+
+eqVars' :: [(String,String)] -> String -> [String]
+eqVars' ((var,content):[]) eqVar   | var == eqVar = [content]
+                                   | otherwise    = []
+
+eqVars' ((var,content):rows) eqVar | var == eqVar = [content] ++ eqVars' rows eqVar
+                                   | otherwise    = eqVars' rows eqVar
+
+-- =========== EVAL FROM GET EXPR 
 printAsVars :: [String] -> Tables -> String
 printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (keepRowsWithDup (getNextAndCombine [[]] tables)))
                           | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
-
--- -- TODO: Do exactly the same as printAsVars but only keep those rows where the variables in [(String,String)] are equal! 
--- printAsVars' :: [String] -> [(String,String)] -> Tables -> String
 
 -- getting the next table and making the combinations with the curr
 getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
@@ -53,6 +79,7 @@ getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ get
 -- keeping the rows that have duplicates
 keepRowsWithDup :: [[(String,String)]] -> [[(String,String)]]
 keepRowsWithDup combinations = [ c | c <- combinations, equalVars c]
+
 
 -- [(x1,1),(x1,2),(x1,2),(x3,3)]
 equalVars :: [(String,String)] -> Bool 
