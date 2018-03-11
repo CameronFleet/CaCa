@@ -6,13 +6,16 @@ import Data.Char
 import Data.List
 import Data.List
 
+
+-- DATA/TYPES
+
 -- Type of all of the Relations and their corrosponding Tables; what for?
 -- Realtion == Relation "A" aka table for A.csv
 type Tables = [(Relation, Table)] 
 
 -- Representation of all the information for a single Relational Symbol
-data Table = Column String [String] | Columns String [String] Table deriving Show
-
+data Table = Column Basic [String] | Columns Basic [String] Table deriving Show
+data Basic = SomeBasic String | VarBasic String deriving Show
 
 -- ================================================================  EVAL  ============================================================================================
 eval :: Program -> Tables -> String
@@ -26,12 +29,11 @@ evalFromGetExpr _ asVars tables = evalAsVars asVars tables
 evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
 evalFromGetWhere _ equals asVars tables = evalAsVars' asVars equals tables
 
--- Checks if the list of all Variables in Table, e.g ["x1","x2","x3"] (Those defined in fromgets)
+-- evaluates the AsVars for a FromGetExpr
 evalAsVars :: AsVars -> Tables -> String
 evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars (convertAsVars asVars) tables
                          | otherwise = error "All Variables should be declared as AS Vars"
-
--- TODO: make a 'convertEquals' function that converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4; Can be in AUX
+-- evalutes the AsVars for a FromGetWhere
 evalAsVars' :: AsVars -> Equals -> Tables -> String
 evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars' (convertAsVars asVars) (convertEquals equals) tables
                                  | otherwise = error "All Variables should be declared as AS Vars"
@@ -39,7 +41,6 @@ evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars ta
 -- ============================================================  EvalAsVar AUX  ========================================================================================
 
 -- =========== EVAL FROM GET WHERE
--- TODO: Do exactly the same as printAsVars but only keep those rows where the variables in [(String,String)] are equal! 
 printAsVars' :: [String] -> [(String,String)] -> Tables -> String
 printAsVars' asVars equals tables | areDuplicateVars tables = concat ( map (orderAs asVars) outputRowsDupEqVars)
                                   | otherwise               = concat ( map (orderAs asVars) outputRowsEqVars)
@@ -129,7 +130,7 @@ getRow (Columns var cs table) index = [(var,cs!!index)] ++ (getRow table index)
 
 -- returns the number of rows in a given table
 getNumberOfRows :: Table -> Int
-getNumberOfRows (Column var [] = 0
+getNumberOfRows (Column var []) = 0
 getNumberOfRows (Column var (c:cs)) = 1 + getNumberOfRows (Column var cs)
 getNumberOfRows (Columns var [] table) = 0
 getNumberOfRows (Columns var (c:cs) table) = 1 + getNumberOfRows (Columns var (cs) table)
@@ -150,34 +151,36 @@ getFilePaths'' (Relation r) = [filepath r]
 
 
 -- Get Relations Variables!, Each variable is assigned to a column in the table! 
-getVars :: Program -> [(Relation,[String])]
+-- Takes a AST, and returns [(Relation "A", ["x1","x2","k","x3"]), (Relation "B" , ["x1","x2","k","x3"])] 
+getVars :: Program -> [(Relation, [Basic])]
 getVars (Program (FromGetExpr fromGet _)) = getVars' fromGet
 getVars (Program (FromGetWhere fromGet _ _)) = getVars' fromGet
 
-getVars' :: FromGet -> [(Relation,[String])] 
-getVars' (FromGetAnd relation toGet fromGet) = [(relation, (listVarsToGet toGet))] ++ getVars' fromGet
-getVars' (FromGet relation toGet) = [(relation, (listVarsToGet toGet))]
+getVars' :: FromGet -> [(Relation, [Basic])] 
+getVars' (FromGetAnd relation toGet fromGet) = [(relation, (listBasicsToGet toGet))] ++ getVars' fromGet
+getVars' (FromGet relation toGet) = [(relation, (listBasicsToGet toGet))]
 
-listVarsToGet :: ToGet -> [String]
-listVarsToGet (Params1(Var v)) = [v]
-listVarsToGet (Params2 toGet toGet1) = listVarsToGet toGet ++ listVarsToGet toGet1
+listBasicsToGet :: ToGet -> [Basic]
+listBasicsToGet (Params (Some v)) = [SomeBasic v] -- Change this
+listBasicsToGet (Params1 (Var v)) = [VarBasic v]
+listBasicsToGet (Params2 toGet toGet1) = listBasicsToGet toGet ++ listBasicsToGet toGet1
 
 -- Generate the Tables. 
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
 -- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
-makeTables :: [String] -> [(Relation,[String])] -> Tables 
-makeTables (content:[]) ((relation, vars):[]) = [(relation, (makeTable content vars))]
-makeTables (content:contents) ((relation, vars):ys) = [(relation, (makeTable content vars))] ++ (makeTables contents ys)
+makeTables :: [String] -> [(Relation, [Basic])] -> Tables 
+makeTables (content:[]) ((relation, basics):[]) = [(relation, (makeTable content basics))]
+makeTables (content:contents) ((relation, basics):ys) = [(relation, (makeTable content basics))] ++ (makeTables contents ys)
 makeTables _ _ = error "There should be an error here"
 
-makeTable :: String -> [String] -> Table
-makeTable content vars = makeTable' (splitContents content) vars
+makeTable :: String -> [Basic] -> Table
+makeTable content basics = makeTable' (splitContents content) basics
 
-makeTable' :: [[String]] -> [String] -> Table
-makeTable' [] (v:[]) = Column v []
-makeTable' [] (v:vars) = Columns v [] (makeTable' [] vars)
-makeTable' (c:[]) (v:[]) = Column v c
-makeTable' (c:content) (v:vars) = Columns v c (makeTable' content vars)
+makeTable' :: [[String]] -> [Basic] -> Table
+makeTable' [] (b:[]) = Column b []
+makeTable' [] (b:basics) = Columns b [] (makeTable' [] basics)
+makeTable' (c:[]) (b:[]) = Column b c
+makeTable' (c:content) (b:basics) = Columns b c (makeTable' content basics)
 makeTable' _ _ = error "There should be an error here"
 
 -- ================================================================  AUX  =============================================================================================
