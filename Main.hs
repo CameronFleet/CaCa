@@ -128,6 +128,8 @@ getRow (Columns var cs table) index = [(var,cs!!index)] ++ (getRow table index)
 
 -- returns the number of rows in a given table
 getNumberOfRows :: Table -> Int
+getNumberOfRows (Column var []) = 0
+getNumberOfRows (Column var (c:cs)) = 1 + getNumberOfRows (Column var cs)
 getNumberOfRows (Columns var [] table) = 0
 getNumberOfRows (Columns var (c:cs) table) = 1 + getNumberOfRows (Columns var (cs) table)
 
