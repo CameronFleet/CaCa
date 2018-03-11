@@ -15,7 +15,7 @@ type Tables = [(Relation, Table)]
 
 -- Representation of all the information for a single Relational Symbol
 data Table = Column Basic [String] | Columns Basic [String] Table deriving Show
-data Basic = SomeBasic String | VarBasic String deriving Show
+data Basic = SomeBasic String | VarBasic String deriving (Show,Eq)
 
 -- ================================================================  EVAL  ============================================================================================
 eval :: Program -> Tables -> String
@@ -44,7 +44,8 @@ evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars ta
 printAsVars' :: [String] -> [(String,String)] -> Tables -> String
 printAsVars' asVars equals tables | areDuplicateVars tables = concat ( map (orderAs asVars) outputRowsDupEqVars)
                                   | otherwise               = concat ( map (orderAs asVars) outputRowsEqVars)
-                                  where outputRowsEqVars = (keepRowsWithEqVars (getNextAndCombine [[]] tables) equals)
+                                  where outputRows          = processExtQuant (keepDupsExtQuant (getNextAndCombine [[]] tables))
+                                        outputRowsEqVars    = (keepRowsWithEqVars outputRows equals)
                                         outputRowsDupEqVars = (keepRowsWithDup outputRowsEqVars)
 
 keepRowsWithEqVars :: [[(String,String)]] -> [(String,String)] -> [[(String,String)]]
@@ -69,12 +70,12 @@ eqVars' ((var,content):rows) eqVar | var == eqVar = [content] ++ eqVars' rows eq
 
 -- =========== EVAL FROM GET EXPR 
 printAsVars :: [String] -> Tables -> String
-printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (keepRowsWithDup (getNextAndCombine [[]] tables)))
-                          | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
+printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) outputRowsDupVars)
+                          | otherwise = concat ( map (orderAs asVars) outputRows)
+                          where outputRows        = processExtQuant (keepDupsExtQuant (getNextAndCombine [[]] tables))
+                                outputRowsDupVars = keepRowsWithDup outputRows
 
-
--- getting the next table and making the combinations with the curr
-getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
+getNextAndCombine :: [[(Basic,String)]] -> Tables -> [[(Basic,String)]]
 getNextAndCombine combinations ((_,table):[]) = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
 getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
 
@@ -85,7 +86,7 @@ keepRowsWithDup combinations = [ c | c <- combinations, equalVars c]
 
 -- [(x1,1),(x1,2),(x1,2),(x3,3)]
 equalVars :: [(String,String)] -> Bool 
-equalVars ((_,_):[])          = True
+equalVars (_:[])          = True
 equalVars ((var,content):row) = (equalVars' var content row) && (equalVars row)
 
 equalVars' :: String -> String -> [(String,String)] -> Bool
@@ -96,11 +97,6 @@ equalVars' var content ((var2,content2):[])  | var == var2 && content == content
 equalVars' var content ((var2,content2):row) | var == var2 && content == content2 = True && (equalVars' var content row)
                                              | var /= var2                        = True && (equalVars' var content row)
                                              | otherwise                          = False
-
--- if there is a duplicate var:
-areDuplicateVars :: Tables -> Bool
-areDuplicateVars tables | duplicates (getTablesVars tables) = True
-                        | otherwise = False
                   
 -- Parameter $1: all Rows in form (Variable, Content) so e.g if r1 x1, (Row 1, Column x1) contains "Hello" then this will be [("x1", "Hello")]
 -- Parameter $2: the AsVar variables e.g in the form such ["x1","x4","x2","x3"] denotes the printing out in this order                                 
@@ -113,6 +109,53 @@ orderAs' []  _ = error "smth went wrong"
 orderAs' ((var,content):vcs) v  | v == var = content
                                 | otherwise = orderAs' vcs v
 
+-- To Remove all 'some' from the output. e.g.
+-- [[(some k, "hi"), (var x1, "bye"), (var x2, "lol")]] ==> [[(x1,"bye"), (x2,"lol")]]
+
+-- Takes in such :
+-- [[(some k, hi), (some k, hi)],[(some k, hi),(some k, bye)]] ==> [[(some k, hi), (some k, hi)]]
+-- [
+--[(some k, hi), (some k, hi), (var x1, sasa)],
+--[(some k, bye), (some k, lolol), (var x1, sasa)]
+--]
+-- ==> [(some k, hi), (some k, hi), (var x1, sasa)]
+keepDupsExtQuant :: [[(Basic, String)]] -> [[(Basic, String)]]
+keepDupsExtQuant rows = [ row | row <- rows, allExtQuantEqual row]
+
+allExtQuantEqual :: [(Basic, String)] -> Bool
+allExtQuantEqual (_:[])                    = True
+allExtQuantEqual (((VarBasic _), content):row)   = allExtQuantEqual row
+allExtQuantEqual (((SomeBasic v), content):row)  = (allExtQuantEqual' v content row) && allExtQuantEqual row
+
+-- Variable, Content, and a Row 
+-- [(Some a, "hi"),(var x1,321),(Some a, hi),(Some a, lol)]
+
+-- (Some a, "hi") (Some b, lol)
+allExtQuantEqual' :: String -> String -> [(Basic, String)] -> Bool
+allExtQuantEqual' someVar content (((SomeBasic var), content2):[])  | someVar == var && content == content2 = True
+                                                                    | someVar /= var                        = True
+                                                                    | otherwise                             = False
+
+allExtQuantEqual' _ _ (((VarBasic _), content2):[])                                                         = True
+
+allExtQuantEqual' someVar content (((SomeBasic var), content2):row) | someVar == var && content == content2 = True && (allExtQuantEqual' someVar content row)
+                                                                    | someVar /= var                        = True && (allExtQuantEqual' someVar content row)
+                                                                    | otherwise                             = False
+
+allExtQuantEqual' someVar content (((VarBasic _), content2):row)                                            = True && (allExtQuantEqual' someVar content row)
+                                                               
+
+processExtQuant :: [[(Basic,String)]] -> [[(String,String)]]
+processExtQuant []       = []
+processExtQuant (r:[])   = [processExtQuant' r]
+processExtQuant (r:rows) = [processExtQuant' r] ++ processExtQuant rows
+
+processExtQuant' :: [(Basic,String)] -> [(String,String)]
+processExtQuant' ((VarBasic v, content):[])  = [(v,content)]
+processExtQuant' ((SomeBasic _, content):[]) = []
+processExtQuant' ((VarBasic v, content):vs)  = [(v,content)] ++ processExtQuant' vs
+processExtQuant' ((SomeBasic _, content):vs) = processExtQuant' vs
+
 -- ==========================================================  TABLE MANIPULATORS  ====================================================================================
 
 getTablesVars :: Tables -> [String]
@@ -120,20 +163,28 @@ getTablesVars ((_, table):[]) = getTableVars table
 getTablesVars ((_, table):tables) = (getTableVars table) ++ (getTablesVars tables)
 
 getTableVars :: Table -> [String]
-getTableVars (Column var _) = [var]
-getTableVars (Columns var _ table) = [var] ++ (getTableVars table)
+getTableVars (Column (SomeBasic _) _) = []
+getTableVars (Column (VarBasic var) _) = [var]
+getTableVars (Columns (SomeBasic _) _ table) = (getTableVars table)
+getTableVars (Columns (VarBasic var) _ table) = [var] ++ (getTableVars table)
 
 -- returns the Row of a given index in a table in form [(column, content)]
-getRow :: Table -> Int -> [(String, String)]
-getRow (Column var cs) index        = [(var,cs!!index)]
-getRow (Columns var cs table) index = [(var,cs!!index)] ++ (getRow table index)
+getRow :: Table -> Int -> [(Basic, String)]
+getRow (Column b cs) index        = [(b,cs!!index)]
+getRow (Columns b cs table) index = [(b,cs!!index)] ++ (getRow table index)
 
 -- returns the number of rows in a given table
 getNumberOfRows :: Table -> Int
-getNumberOfRows (Column var []) = 0
-getNumberOfRows (Column var (c:cs)) = 1 + getNumberOfRows (Column var cs)
-getNumberOfRows (Columns var [] table) = 0
-getNumberOfRows (Columns var (c:cs) table) = 1 + getNumberOfRows (Columns var (cs) table)
+getNumberOfRows (Column b []) = 0
+getNumberOfRows (Column b (c:cs)) = 1 + getNumberOfRows (Column b cs)
+getNumberOfRows (Columns b [] table) = 0
+getNumberOfRows (Columns b (c:cs) table) = 1 + getNumberOfRows (Columns b (cs) table)
+
+
+-- if there is a duplicate var:
+areDuplicateVars :: Tables -> Bool
+areDuplicateVars tables | duplicates (getTablesVars tables) = True
+                        | otherwise = False
 
 -- =============================================================  TABLE MAKERS  =======================================================================================
 
@@ -189,6 +240,15 @@ makeTable' _ _ = error "There should be an error here"
 convertAsVars :: AsVars -> [String]
 convertAsVars (AsVar (Var s)) = [s]
 convertAsVars (AsVars (Var s) asVars) = [s] ++ (convertAsVars asVars)
+
+-- converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4
+convertEquals :: Equals -> [(String,String)]
+convertEquals (EqualVar var1 var2) = [(getStringVar var1, getStringVar var2)] 
+convertEquals (EqualVars var1 var2 eq) = [(getStringVar var1, getStringVar var2)] ++ (convertEquals eq) 
+
+-- takes the sting part of the Var: Var "x1" = "x1"
+getStringVar :: Var -> String
+getStringVar (Var v) = v
 
 equalList :: [String] -> [String] -> Bool
 equalList x y = null (x \\ y) && null (y \\ x)
