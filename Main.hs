@@ -17,26 +17,36 @@ data Table = Column String [String] | Columns String [String] Table deriving Sho
 -- ================================================================  EVAL  ============================================================================================
 eval :: Program -> Tables -> String
 eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
-eval (Program (FromGetWhere fromGet equals vars)) tables = ""
+eval (Program (FromGetWhere fromGet equals vars)) tables = evalFromGetWhere fromGet equals vars tables
 
 evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
 evalFromGetExpr _ asVars tables = evalAsVars asVars tables
+
+-- TODO: make a function that converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4; Can be in AUX
+evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
+evalFromGetWhere _ equals asVars tables = evalAsVars' asVars (convertEquals equals) tables
 
 -- Checks if the list of all Variables in Table, e.g ["x1","x2","x3"] (Those defined in fromgets)
 evalAsVars :: AsVars -> Tables -> String
 evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (asVarsToString asVars) = printAsVars (asVarsToString asVars) tables
                          | otherwise = error "All Variables should be declared as AS Vars"
 
--- ============================================================  EVALASVAR AUX  ========================================================================================
+-- TODO: Do exactly the same as above but printAsVars' should also take in [(String,String)]
+evalAsVars' :: AsVars -> [(String,String)] -> Tables -> String
+
+-- ============================================================  EvalAsVar AUX  ========================================================================================
+
+printAsVars :: [String] -> Tables -> String
+printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (keepRowsWithDup (getNextAndCombine [[]] tables)))
+                          | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
+
+-- TODO: Do exactly the same as printAsVars but only keep those rows where the variables in [(String,String)] are equal! 
+printAsVars' :: [String] -> [(String,String)] -> Tables -> String
 
 -- getting the next table and making the combinations with the curr
 getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
 getNextAndCombine combinations ((_,table):[]) = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
 getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
-
-printAsVars :: [String] -> Tables -> String
-printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) (keepRowsWithDup (getNextAndCombine [[]] tables)))
-                          | otherwise = concat ( map (orderAs asVars) (getNextAndCombine [[]] tables))
 
 -- keeping the rows that have duplicates
 keepRowsWithDup :: [[(String,String)]] -> [[(String,String)]]
@@ -81,11 +91,6 @@ getTablesVars ((_, table):tables) = (getTableVars table) ++ (getTablesVars table
 getTableVars :: Table -> [String]
 getTableVars (Column var _) = [var]
 getTableVars (Columns var _ table) = [var] ++ (getTableVars table)
-
--- areDuplicateVars :: Tables -> Bool
--- areDuplicateVars tables | (length tableVars) == (length (removeDuplicates tableVars)) = False
---                         | otherwise = True
---                         where tableVars = getTablesVars tables
 
 -- returns the Row of a given index in a table in form [(column, content)]
 getRow :: Table -> Int -> [(String, String)]
