@@ -44,9 +44,11 @@ data Env = PolyEnv Env Env | MonoEnv String Env | TablesEnv Tables
 -}
 
 -- Evaluates the AST (Program) using the 'Tables' information retrieved from FromGet Statements, Returns the Output String
-eval :: Program -> Tables -> String
-eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
-eval (Program (FromGetWhere fromGet equals vars)) tables = evalFromGetWhere fromGet equals vars tables
+eval :: Program -> Tables -> Env -> String
+eval (Program statement _) tables env = evalStatements statement tables env
+
+evalStatements :: Statements -> Tables -> Env -> String
+evalStatements 
 
 -- Evaluates the FromGetExpr, returning the Output String
 evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
@@ -270,44 +272,54 @@ areDuplicateVars tables | duplicates (getTablesVars tables) = True
 
 -- Returns FILEPATHS from a program, in the format ["A.csv", "B.csv"] 
 getFilePaths :: Program -> [FilePath]
-getFilePaths (Program (FromGetExpr fromGet _))    = getFilePaths' fromGet
-getFilePaths (Program (FromGetWhere fromGet _ _)) = getFilePaths' fromGet
+getFilePaths (Program statement _ ) = getFilePaths'' statement
 
-getFilePaths' :: FromGet -> [FilePath]
-getFilePaths' (FromGetAnd relation _ fromGet) = getFilePaths'' relation ++ getFilePaths' fromGet
-getFilePaths' (FromGet relation _)            = getFilePaths'' relation
+getFilePaths' :: Statements -> [FilePath]
+getFilePaths' (FromGetExpr fromGet)              = getFilePaths'' fromGet
+getFilePaths' (FromGetWhere fromGet _)           = getFilePaths'' fromGet
+getFilePaths' (AnyExpr _ statement1 statement2 ) = getFilePaths' statement1 ++ getFilePaths' statement2
+getFilePaths' (Any _ statement)                  = getFilePaths' statement 
 
-getFilePaths'' :: Relation -> [FilePath]
-getFilePaths'' (Relation r) = [filepath r]
+getFilePaths'' :: FromGet -> [FilePath]
+getFilePaths'' (FromGetAnd relation _ fromGet)   = getFilePaths'' relation ++ getFilePaths'' fromGet
+getFilePaths'' (FromGet relation _)              = getFilePaths'' relation
+
+getFilePaths''' :: Relation -> [FilePath]
+getFilePaths''' (Relation r) = [filepath r]
 
 
 -- Get Relations Variables!, Each variable is assigned to a column in the table! 
 -- Takes a AST, and returns [(Relation "A", ["x1","x2","k","x3"]), (Relation "B" , ["x1","x2","k","x3"])] 
-getVars :: Program -> [(Relation, [Basic])]
-getVars (Program (FromGetExpr fromGet _))    = getVars' fromGet
-getVars (Program (FromGetWhere fromGet _ _)) = getVars' fromGet
+getVars :: Program -> [(Relation, [String])]
+getVars (Program statement _)    = getVars' statement
 
-getVars' :: FromGet -> [(Relation, [Basic])] 
-getVars' (FromGetAnd relation toGet fromGet) = [(relation, (listBasicsToGet toGet))] ++ getVars' fromGet
-getVars' (FromGet relation toGet)            = [(relation, (listBasicsToGet toGet))]
+getVars' :: Statements -> [(Relation, [String])]
+getVars' (FromGetExpr fromGet)              = getVars'' fromGet
+getVars' (FromGetWhere fromGet _)           = getVars'' fromGet
+getVars' (AnyExpr _ statement1 statement2 ) = getVars' statement1 ++ getVars' statement2
+getVars' (Any _ statement)                  = getVars' statement 
 
-listBasicsToGet :: ToGet -> [Basic]
-listBasicsToGet (Params (Some v))      = [SomeBasic v] -- Change this
-listBasicsToGet (Params1 (Var v))      = [VarBasic v]
-listBasicsToGet (Params2 toGet toGet1) = listBasicsToGet toGet ++ listBasicsToGet toGet1
+
+getVars'' :: FromGet -> [(Relation, [String])] 
+getVars'' (FromGetAnd relation vars fromGet) = [(relation, (getVars''' toGet))] ++ getVars'' fromGet
+getVars'' (FromGet relation vars)            = [(relation, (getVars''' toGet))]
+
+getVars''' :: Vars -> [String]
+getVars''' (Param (Var v))       = [v]
+getVars''' (Params (Var v) vars) = [v] ++ getVars''' vars
 
 -- Generate the Tables. 
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
 -- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
-makeTables :: [String] -> [(Relation, [Basic])] -> Tables 
+makeTables :: [String] -> [(Relation, [String])] -> Tables 
 makeTables (content:[]) ((relation, basics):[])       = [(relation, (makeTable content basics))]
 makeTables (content:contents) ((relation, basics):ys) = [(relation, (makeTable content basics))] ++ (makeTables contents ys)
 makeTables _ _                                        = error "There should be an error here"
 
-makeTable :: String -> [Basic] -> Table
+makeTable :: String -> [String] -> Table
 makeTable content basics = makeTable' (splitContents content) basics
 
-makeTable' :: [[String]] -> [Basic] -> Table
+makeTable' :: [[String]] -> [String] -> Table
 makeTable' [] (b:[])              = Column b []
 makeTable' [] (b:basics)          = Columns b [] (makeTable' [] basics)
 makeTable' (c:[]) (b:[])          = Column b c
