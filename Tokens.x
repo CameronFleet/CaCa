@@ -25,6 +25,9 @@ $white+       ;
   \}            { \s -> TokenRCurlyBrace }
   as            { \s -> TokenAs}
   some          { \s -> TokenSome}
+  any           { \s -> TokenAny}
+  \(            { \s -> TokenLBracket }
+  \)            { \s -> TokenRBracket }
 
 
   $digit+       ;
@@ -48,6 +51,9 @@ data Token =
   TokenRCurlyBrace    |
   TokenSome           |
   TokenAs             |
+  TokenAny            |
+  TokenLBracket       |
+  TokenRBracket       |
   TokenString String  |
   TokenRelationalSymbol String 
   deriving (Eq,Show) 

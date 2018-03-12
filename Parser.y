@@ -1,5 +1,5 @@
 { 
-module Parser where 
+module Main(main) where 
 import Tokens 
 
 
@@ -24,62 +24,59 @@ import Tokens
     string  { TokenString $$ }
     relation { TokenRelationalSymbol $$ }
     as      { TokenAs}
+    any     { TokenAny}
+    '('     { TokenLBracket }
+    ')'     { TokenRBracket }
 
 
 %% 
 
-Program : start Statements end { Program $2}
+Program : start Statements as Vars end        { Program $2 $4}
 
-Statements : FromGet ';' as AsVars                       { FromGetExpr $1 $4}
-           | FromGet ';' where '{' Equals '}' as AsVars  { FromGetWhere $1 $5 $8}
+Statements : FromGet                                        { FromGetExpr $1}
+           | FromGet where '{' Equals '}'                   { FromGetWhere $1 $4 }
+           | any '(' Var ')' '{' Statements '}' Statements  { AnyExpr $3 $6 $8}
+           | Statements any '(' Var ')' '{' Statements '}'  { AnyExpr $4 $7 $1}  
+           | any '(' Var ')' '{' Statements '}'             { Any $3 $6}            
 
-FromGet : from Relation get ToGet and FromGet            { FromGetAnd $2 $4 $6}   
-        | from Relation get ToGet                        { FromGet $2 $4}
+FromGet : from Relation get Vars and FromGet      { FromGetAnd $2 $4 $6}   
+        | from Relation get Vars                  { FromGet $2 $4}
 
-Equals : Var '=' Var ';'                                 { EqualVar $1 $3 }
-       | Var '=' Var ';' Equals                          { EqualVars $1 $3 $5}
+Equals : Var '=' Var ';'                          { EqualVar $1 $3 }
+       | Var '=' Var ';' Equals                   { EqualVars $1 $3 $5}
 
-ToGet : Some                                             { Params $1}
-      | Var                                              { Params1 $1}
-      | ToGet ',' ToGet                                  { Params2 $1 $3}
+Vars    :  Var                                    { Param $1}
+        |  Var ',' Vars                           { Params $1 $3}    
 
-AsVars : Var                                               { AsVar $1}
-       | Var ',' AsVars                                    { AsVars $1 $3}
-
-
-Some     : some string { Some $2 }
 Var      : string      { Var $1 }
 Relation : relation    { Relation $1}
     
 { 
 parseError :: [Token] -> a
-parseError _ = error "Parse error" 
+parseError _ = error "Parse error on " 
 
-data Program = Program Statements deriving Show
+data Program = Program Statements Vars deriving Show
 
-data Statements = FromGetExpr FromGet AsVars
-                | FromGetWhere FromGet Equals AsVars deriving Show
+data Statements = FromGetExpr FromGet 
+                | FromGetWhere FromGet Equals  
+                | AnyExpr Var Statements Statements 
+                | Any Var Statements deriving Show
 
-data FromGet = FromGetAnd Relation ToGet FromGet
-             | FromGet Relation ToGet deriving Show
+data FromGet = FromGetAnd Relation Vars FromGet
+             | FromGet Relation Vars deriving Show
 
 data Equals = EqualVar Var Var 
             | EqualVars Var Var Equals deriving Show
 
-data ToGet = Params Some 
-           | Params1 Var 
-           | Params2 ToGet ToGet deriving Show
+data Vars = Param Var 
+          | Params Var Vars deriving Show
 
-data AsVars = AsVar Var 
-            | AsVars Var AsVars deriving Show
-
-
-data Some = Some String deriving Show
 data Var =  Var String deriving Show
 data Relation = Relation String deriving Show
 
---main = do 
---  inStr <- getContents
---  let parseTree = caca (alexScanTokens inStr)  
---  putStrLn (show(parseTree))
+
+main = do 
+  inStr <- getContents
+  let parseTree = caca (alexScanTokens inStr)  
+  putStrLn (show(parseTree))
 }
