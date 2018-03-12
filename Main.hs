@@ -257,6 +257,12 @@ areDuplicateVars :: Tables -> Bool
 areDuplicateVars tables | duplicates (getTablesVars tables) = True
                         | otherwise = False
 
+
+getTables :: Tables -> [Relation] -> Tables
+getTables [] _ = []
+getTables ((r,table):tables)) relationsToGet | r `elem` relationsToGet = [(r,table)] ++ (getTables tables relationsToGet)
+                                             | otherwise               = (getTables tables relationsToGet)
+
 -- =============================================================  ENV MAKERS  =======================================================================================
 
 {- OVERVIEW
@@ -314,9 +320,22 @@ makeTable' (c:[]) (b:[])          = Column b c
 makeTable' (c:content) (b:basics) = Columns b c (makeTable' content basics)
 makeTable' _ _                    = error "There should be an error here"
 
-
+-- Generates the Enviroment
 makeEnv :: Tables -> Program -> Env
+makeEnv tables (Program (FromGetExpr _) _)                     = TablesEnv tables
+makeEnv tables (Program (FromGetWhere _) _)                    = TablesEnv tables
+makeEnv tables (Program (Any (Var v) nestedStmnts) _)          = MonoEnv v (makeEnv' nestedStmnts tables)
+makeEnv tables (Program (AnyExpr (Var v) nestedStmnts stmnts)) = PolyEnv (MonoEnv v (makeEnv' tables nestedStmnts)) (makeEnv' tables stmnts)
 
+makeEnv' :: Tables -> Statements -> Env
+makeEnv' tables (FromGetExpr fromGet)                 = makeEnv'' tables fromGet
+makeEnv' tables (FromGetWhere fromGet _)              = makeEnv'' tables fromGet
+makeEnv' tables (Any (Var v) nestedStmnts)            = MonoEnv v (makeEnv' nestedStmnts tables)
+makeEnv' tables (AnyExpr (Var v) nestedStmnts stmnts) = PolyEnv (MonoEnv v (makeEnv' nestedStmnts tables)) (makeEnv' tables stmnts)
+
+makeEnv'' :: Tables -> FromGet -> Env
+makeEnv'' tables (FromGet r _)               = TablesEnv (getTables tables [r])
+makeEnv'' tables (FromGetAnd r vars fromGet) = TablesEnv (getTables tables (getRelations (FromGetAnd r vars fromGet)))
 
 -- ================================================================  AUX  =============================================================================================
 
@@ -335,6 +354,11 @@ convertAsVars (AsVars (Var s) asVars) = [s] ++ (convertAsVars asVars)
 convertEquals :: Equals -> [(String,String)]
 convertEquals (EqualVar var1 var2)     = [(getStringVar var1, getStringVar var2)] 
 convertEquals (EqualVars var1 var2 eq) = [(getStringVar var1, getStringVar var2)] ++ (convertEquals eq) 
+
+
+getRelations :: FromGet -> [String]
+getRelations (FromGet r _)            = [r]
+getRelations (FromGetAnd r _ fromGet) = [r] ++ getRelations fromGet
 
 -- takes the sting part of the Var: Var "x1" = "x1"
 getStringVar :: Var -> String
