@@ -1,5 +1,5 @@
 { 
-module Main(main) where 
+module Parser where 
 import Tokens 
 
 
@@ -71,12 +71,12 @@ data Equals = EqualVar Var Var
 data Vars = Param Var 
           | Params Var Vars deriving Show
 
-data Var =  Var String deriving Show
-data Relation = Relation String deriving Show
+data Var =  Var String deriving (Show,Eq)
+data Relation = Relation String deriving (Show,Eq)
 
 
-main = do 
-  inStr <- getContents
-  let parseTree = caca (alexScanTokens inStr)  
-  putStrLn (show(parseTree))
+--main = do 
+--  inStr <- getContents
+--  let parseTree = caca (alexScanTokens inStr)  
+--  putStrLn (show(parseTree))
 }

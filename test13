@@ -1,0 +1,26 @@
+//TEST CASE: 13
+//TESTING  : More Complex Existential quantification; 
+// ∃z.R(x1, z) ^ ∃s.R(x1, s)
+
+//A:          B:
+//2,10        2,4
+//3,12        2,12
+  
+start
+
+any(z){
+    any(p){
+        from A get p,z
+    }
+    from B get p,z
+}
+
+as p
+
+end
+
+//Expected: 2 
+   
+//Actual: 
+
+//Verdict: PASS

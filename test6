@@ -1,0 +1,23 @@
+//TEST CASE: 6
+//TESTING  : Conjunction and variable repetition; two vars repeated
+
+//A:    B:
+//1,2   3,4
+//2,3   1,2
+
+
+//Expected: 2,1
+  
+
+
+start
+
+from A get x1,x2 and
+from B get x1,x2
+as x2,x1
+
+end
+
+//Actual: 2,1
+
+//Verdict: PAss

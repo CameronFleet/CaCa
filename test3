@@ -1,0 +1,27 @@
+//TEST CASE: 3
+//TESTING  : Simple Conjuction; Different row numbers
+
+//A:    C:
+//1,2   5
+//2,3   6
+
+
+//Expected: 5,1,2
+//          5,2,3    
+
+
+start
+
+from A get x1,x2 and
+from C get x5
+as x5,x1,x2
+
+end
+
+//Actual:
+//5,1,2
+//6,1,2
+//5,2,3
+//6,2,3
+
+//Verdict: apparently i have no idea whats happening

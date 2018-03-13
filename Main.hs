@@ -11,8 +11,9 @@ TODO:
 - sorting
 - errors
 - testing
-- syntax
+- syntax - fucked us, but maybe saved
 - removing white space - maybe done, tested
+- maybe add repteated as vars
 -}
 
 
@@ -20,62 +21,47 @@ TODO:
 type Tables = [(Relation, Table)] 
 
 -- The Data Structure used to store all the information need about any given Relation
--- Basic    : Denotes the Variable or Existential quantification associated with a column
+-- String    : Denotes the Variable or Existential quantification associated with a column
 -- [String] : Denotes the Contents of a column, each String in this list are on distinct rows
 {- EXAMPLE
 A.csv = 1,2\n 3,4\n.; ∃k.A(x1,k)
-Table = Columns (VarBasic "x1") ["1","3"] (Column (SomeBasic "k") ["2","4"])
+Table = Columns "x1" ["1","3"] (Column "k" ["2","4"])
 -}
 data Table = Column String [String] | Columns String [String] Table deriving Show
 
--- Comment this
-data Env = PolyEnv Env Env | MonoEnv String Env | TablesEnv Tables 
+-- The Enviroment system used to distinguish different Existential quantifiers in different enviroments
+-- String : variable name of the existential quantifier
+-- Tables : a list of all of the tables that exist within the enviroment 
+{- EXAMPLE
+A.csv = 1,2\n 3,4\n.; ∃k.A(x1,k)
+Env = MonoEnv "k" (TablesEnv (Columns "x1" ["1","3"] (Column "k" ["2","4"])))
+-}
+data Env = PolyEnv Env Env | MonoEnv String Env | TablesEnv Tables deriving Show
 
 {- ===============================================================  EVAL  =============================================================== -}
 
-{- OVERVIEW 
+-- {- OVERVIEW 
 
---eval              => -evaluates a Program AST and returns the Output String
---evalFromGetExpr   => -evaluates AsVars and returns the Output String
---evalFromGetWhere  => -evaluates Equals and AsVars and returns the Output String
---evalAsVars        => -evaluates AsVars and returns the OutputString
---evalAsVars        => -evaluates Equals and AsVars and returns the Output String
+-- --eval              => -evaluates a Program AST and returns the Output String
+-- --evalAsVars        => -evaluates AsVars and returns the OutputString
 
--}
+-- -}
+-- Evaluates the AST (Program) using the 'Env' information retrieved from FromGet Statements, Returns the Output String
+eval :: Program -> Env -> String
+eval (Program stmnts asVars) env  = evalAsVars asVars (getEqualities stmnts) env
 
--- Evaluates the AST (Program) using the 'Tables' information retrieved from FromGet Statements, Returns the Output String
-eval :: Program -> Tables -> String
-eval (Program (FromGetExpr fromGet vars)) tables         = evalFromGetExpr fromGet vars tables
-eval (Program (FromGetWhere fromGet equals vars)) tables = evalFromGetWhere fromGet equals vars tables
-
--- Evaluates the FromGetExpr, returning the Output String
-evalFromGetExpr :: FromGet -> AsVars -> Tables -> String
-evalFromGetExpr _ asVars tables = evalAsVars asVars tables
-
--- Evaluates the FromGetWhere, returning the Output String
-evalFromGetWhere :: FromGet -> Equals -> AsVars -> Tables -> String
-evalFromGetWhere _ equals asVars tables = evalAsVars' asVars equals tables
-
--- Evaluates the AsVars for a FromGetExpr
+-- Evalutes the AsVars Statement
 -- ERROR: Returns an error for the case where not all Variables declared are listed in the 'As' Statement
-evalAsVars :: AsVars -> Tables -> String
-evalAsVars asVars tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars (convertAsVars asVars) tables
-                         | otherwise = error "All Variables should be declared as AS Vars"
-
--- Evalutes the AsVars for a FromGetWhere
--- ERROR: Returns an error for the case where not all Variables declared are listed in the 'As' Statement
-evalAsVars' :: AsVars -> Equals -> Tables -> String
-evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars tables)) (convertAsVars asVars) = printAsVars' (convertAsVars asVars) (convertEquals equals) tables
-                                 | otherwise = error "All Variables should be declared as AS Vars"
+evalAsVars :: Vars -> [(String,String)] -> Env -> String
+evalAsVars asVars equals env       | equalList freeVaribles (convertVars asVars) = printAsVars (convertVars asVars) equals env
+                                   | otherwise                                   = error "All Variables should be declared as AS Vars"
+                                   where freeVaribles = removeDuplicates (getFreeVariables env)
 
 {- ==========================================================  EvalAsVar AUX  ============================================================ -}
 
 {- OVERVIEW 
 
--- printAsVars       => -returns output string for FromGetExpr
--- printAsVars'      => -returns output string for FromGetWhere
-
--- getNextAndCombine => -produces a list of all possible 'row' combinations called 'rows'
+-- printAsVars       => -returns output string 
 
 -- filterEqualVars   => -filters the list of 'rows' into a new list of 'rows' where equal vars have equal contents
 -- filterExtQuant    => -filters the list of 'rows' into a new list of 'rows' where equal Ext. Quant. have equal contents
@@ -86,40 +72,14 @@ evalAsVars' asVars equals tables | equalList (removeDuplicates (getTablesVars ta
 
 -}
 
--- Evaluates the AsVars returning the Output String, WITHOUT any EQUALITY! 
--- Parameter $1: List of asVars denoting the ordering; e.g. ["x1","x3","x2"] [String]
-printAsVars :: [String] -> Tables -> String
-printAsVars asVars tables | areDuplicateVars tables = concat ( map (orderAs asVars) outputRowsDupVars)
-                          | otherwise               = concat ( map (orderAs asVars) outputRows)
-                          where outputRows          = processExtQuant (filterExtQuant (getNextAndCombine [[]] tables))
-                                outputRowsDupVars   = filterEqualVars outputRows
-
 -- Evaluates the AsVars returning the Output String, WITH EQUALITY! 
 -- Parameter $1: List of asVars denoting the ordering; e.g. ["x1","x3","x2"] 
-printAsVars' :: [String] -> [(String,String)] -> Tables -> String
-printAsVars' asVars equals tables | areDuplicateVars tables = concat ( map (orderAs asVars) outputRowsDupEqVars)
-                                  | otherwise               = concat ( map (orderAs asVars) outputRowsEqVars)
-                                  where outputRows          = processExtQuant (filterExtQuant (getNextAndCombine [[]] tables))
-                                        outputRowsEqVars    = (filterEqualities outputRows equals)
-                                        outputRowsDupEqVars = (filterEqualVars outputRowsEqVars)
-
--- Combines all individual Tables in Tables to produce one coherent row across all relations
--- e.g. 
-{- Relation A = 1,2\n 3,4\n ;   Relation B = 5,6\n 7,8\n ;
-   Tables ts = [(Relation A, tableA), (Relation B, tableB)]
-
-   Will first combine [[]] with tableA, producing        -> [ [(VarBasic _, 1),(VarBasic _, 2)], [(VarBasic _, 3), (VarBasic _, 4)] ]
-   Hence we can see each list within the list is a 'Row' 
-
-   We will now combine this above with tableB, producing -> [ [(VarBasic _, 1),(VarBasic _,2),(VarBasic _,5), (VarBasic _,6)],
-                                                              [(VarBasic _, 1),(VarBasic _,2),(VarBasic _,7), (VarBasic _,8)], 
-                                                              [(VarBasic _, 3),(VarBasic _,4),(VarBasic _,5), (VarBasic _,6)],
-                                                              [(VarBasic _, 3),(VarBasic _,4),(VarBasic _,7), (VarBasic _,8)] ]
--}
-getNextAndCombine :: [[(Basic,String)]] -> Tables -> [[(Basic,String)]]
-getNextAndCombine combinations ((_,table):[])     = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
-getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
-
+-- Parameter $2: 
+printAsVars :: [String] -> [(String,String)] -> Env -> String
+printAsVars asVars equals env  = concat (map (orderAs asVars) outputRowsDupEqVars)
+                               where outputRows          = processExtQuant env
+                                     outputRowsEqVars    = (filterEqualities outputRows equals)
+                                     outputRowsDupEqVars = (filterEqualVars outputRowsEqVars)
 
 -- Returns an output of all of the 'rows' but those whose equal vars have equal contents. 
 -- e.g. [(x1,2),(x2,4),(x1,2),(x1,3)] would be removed since the contents, 2 == 2 /= 3 of the equal Var x1. 
@@ -143,31 +103,25 @@ allVarsEqual' var content ((var2,content2):row) | var == var2 && content == cont
 -- Returns an output of all of the 'rows' but those whose equal EXT. Quantifers contents do not match are removed.
 -- e.g. The Row [(VarBasic v, 3), (SomeBasic k, 2), (SomeBasic k, 3)] would be removed since the contents, 2 /= 3 of equal EXT. Quantifers k 
 -- e.g. The Row [(VarBasic v, 3), (SomeBasic k, 2), (SomeBasic k, 2)] would be kept since the contents, 2 == 2 of the equal EXT. Quantifers k
-filterExtQuant :: [[(Basic, String)]] -> [[(Basic, String)]]
-filterExtQuant rows = [ row | row <- rows, allExtQuantEqual row]
+filterExtQuant :: [[(String,String)]] -> [String] -> [[(String, String)]]
+filterExtQuant rows boundVars = [ row | row <- rows, allExtQuantEqual row boundVars]
 
-allExtQuantEqual :: [(Basic, String)] -> Bool
-allExtQuantEqual (_:[])                    = True
-allExtQuantEqual (((VarBasic _), content):row)   = allExtQuantEqual row
-allExtQuantEqual (((SomeBasic v), content):row)  = (allExtQuantEqual' v content row) && allExtQuantEqual row
+allExtQuantEqual :: [(String,String)] -> [String] -> Bool
+allExtQuantEqual [] _ = True
+allExtQuantEqual ((var,content):row) boundVars | var `elem` boundVars = allExtQuantEqual' var content row && allExtQuantEqual row boundVars
+                                               | otherwise            = allExtQuantEqual row boundVars
 
-allExtQuantEqual' :: String -> String -> [(Basic, String)] -> Bool
-allExtQuantEqual' someVar content (((SomeBasic var), content2):[])  | someVar == var && content == content2 = True
-                                                                    | someVar /= var                        = True
-                                                                    | otherwise                             = False
-
-allExtQuantEqual' _ _ (((VarBasic _), content2):[])                                                         = True
-
-allExtQuantEqual' someVar content (((SomeBasic var), content2):row) | someVar == var && content == content2 = True && (allExtQuantEqual' someVar content row)
-                                                                    | someVar /= var                        = True && (allExtQuantEqual' someVar content row)
-                                                                    | otherwise                             = False
-
-allExtQuantEqual' someVar content (((VarBasic _), content2):row)                                            = True && (allExtQuantEqual' someVar content row)
-                                                               
+allExtQuantEqual' :: String -> String -> [(String,String)] -> Bool
+allExtQuantEqual' _ _ [] = True
+allExtQuantEqual' var content ((var2, content2):row) | var == var2 && content == content2 = True && allExtQuantEqual' var content row 
+                                                     | var /= var2                        = True && allExtQuantEqual' var content row 
+                                                     | otherwise                          = False                                               
+                                      
 -- Evaluates each row for all equalities, checking the contents of variables that are meant to be equal and returning those whose content do match
 -- Parameter $1: List of every row, a single row can be described as such: [(x1,"content"), (x2, "content"), (x3,"content")]
 -- Parameter $2: List of all equalities required ; e.g. [("x1","x2"),("x3","x4")] means x1=x2 and x3=x4 
 filterEqualities :: [[(String,String)]] -> [(String,String)] -> [[(String,String)]]
+filterEqualities rows [] = rows 
 filterEqualities rows (eq:[])  = rowsEqVars rows eq
 filterEqualities rows (eq:eqs) = filterEqualities (rowsEqVars rows eq) eqs 
 
@@ -177,7 +131,7 @@ rowsEqVars rows equal = [r | r <- rows, eqVars r equal]
 eqVars :: [(String,String)] -> (String,String) -> Bool
 eqVars rows (eqVar1, eqVar2) | equalList contentVar1 contentVar2 = True
                              | otherwise = False
-                              where contentVar1 = removeDuplicates (eqVars' rows eqVar1) 
+                              where contentVar1 = removeDuplicates (eqVars' rows eqVar1)
                                     contentVar2 = removeDuplicates (eqVars' rows eqVar2)
 
 eqVars' :: [(String,String)] -> String -> [String]
@@ -189,27 +143,45 @@ eqVars' ((var,content):rows) eqVar | var == eqVar = [content] ++ eqVars' rows eq
 
 -- Returns an output of all the rows but with individual columns of 'Some' variables removed and Basic-> String, since all will be vars 
 -- e.g. The Row [(VarBasic v, 3), (SomeBasic k, 2), (SomeBasic k, 2)] ==> [(v, 3)]
-processExtQuant :: [[(Basic,String)]] -> [[(String,String)]]
-processExtQuant []       = []
-processExtQuant (r:[])   = [processExtQuant' r]
-processExtQuant (r:rows) = [processExtQuant' r] ++ processExtQuant rows
+processExtQuant :: Env -> [[(String,String)]]
+processExtQuant (TablesEnv tables) = getNextAndCombine [[]] tables
+processExtQuant (MonoEnv v env) = processExtQuant' [v] env
+processExtQuant (PolyEnv env1 env2) = combineRows (processExtQuant' [] env1) (processExtQuant' [] env2)
 
-processExtQuant' :: [(Basic,String)] -> [(String,String)]
-processExtQuant' ((VarBasic v, content):[])  = [(v,content)]
-processExtQuant' ((SomeBasic _, content):[]) = []
-processExtQuant' ((VarBasic v, content):vs)  = [(v,content)] ++ processExtQuant' vs
-processExtQuant' ((SomeBasic _, content):vs) = processExtQuant' vs
+processExtQuant' :: [String] -> Env -> [[(String, String)]]
+processExtQuant' boundVars (TablesEnv tables)  = processExtQuant'' newTable boundVars
+                                               where newTable = filterExtQuant (getNextAndCombine [[]] tables) boundVars
+processExtQuant' boundVars (MonoEnv v env)     = processExtQuant' (boundVars ++ [v]) env
+processExtQuant' boundVars (PolyEnv env1 env2) = combineRows (processExtQuant' boundVars env1) (processExtQuant' boundVars env2)
+
+processExtQuant'' :: [[(String, String)]] -> [String] -> [[(String,String)]]
+processExtQuant'' [] _ = []
+processExtQuant'' rows [] = rows
+processExtQuant'' (r:rows) boundVars = [processExtQuant''' r boundVars] ++ processExtQuant'' rows boundVars
+
+processExtQuant''' :: [(String, String)] -> [String] -> [(String, String)]
+processExtQuant''' ((var,content):[]) boundVars  | var `elem` boundVars = []
+                                                 | otherwise            = [(var,content)]
+processExtQuant''' ((var,content):row) boundVars | var `elem` boundVars = processExtQuant''' row boundVars
+                                                 | otherwise            = [(var,content)] ++ (processExtQuant''' row boundVars)
 
 -- Parameter $1: all Rows in form (Variable, Content) so e.g if r1 x1, (Row 1, Column x1) contains "Hello" then this will be [("x1", "Hello")]
 -- Parameter $2: the AsVar variables e.g in the form such ["x1","x4","x2","x3"] denotes the printing out in this order                                 
 orderAs :: [String] -> [(String, String)] -> String 
-orderAs (asVar:[]) vcs = orderAs' vcs asVar ++ "\n"
-orderAs (asVar:asVars) vcs = (orderAs' vcs asVar) ++ "," ++ orderAs asVars vcs
+orderAs (asVar:[]) row = orderAs' row asVar ++ "\n"
+orderAs (asVar:asVars) row = (orderAs' row asVar) ++ "," ++ orderAs asVars row
 
 orderAs' :: [(String, String)] -> String -> String
 orderAs' []  _ = error "smth went wrong"
-orderAs' ((var,content):vcs) v  | v == var = content
-                                | otherwise = orderAs' vcs v
+orderAs' ((var,content):row) v  | v == var = content
+                                | otherwise = orderAs' row v
+
+-- ==========================================================  ENV MANIPULATORS  ====================================================================================
+
+getFreeVariables :: Env -> [String]
+getFreeVariables (TablesEnv tables) = removeDuplicates (getTablesVars tables)
+getFreeVariables (MonoEnv v env) = (getFreeVariables env) \\ [v]
+getFreeVariables (PolyEnv env1 env2) = removeDuplicates ((getFreeVariables env1) ++ (getFreeVariables env2))
 
 -- ==========================================================  TABLE MANIPULATORS  ====================================================================================
 
@@ -226,28 +198,26 @@ orderAs' ((var,content):vcs) v  | v == var = content
 -- Returns a list of all variables in all tables given as an arguement
 -- e.g. ( (Relation "A", (Column "x1" [])), (Relation "B", (Column "x2" [])) ) ===> ["x1","x2"]
 getTablesVars :: Tables -> [String]
-getTablesVars ((_, table):[]) = getTableVars table
+getTablesVars ((_, table):[])     = getTableVars table
 getTablesVars ((_, table):tables) = (getTableVars table) ++ (getTablesVars tables)
 
 getTableVars :: Table -> [String]
-getTableVars (Column (SomeBasic _) _)         = []
-getTableVars (Column (VarBasic var) _)        = [var]
-getTableVars (Columns (SomeBasic _) _ table)  = (getTableVars table)
-getTableVars (Columns (VarBasic var) _ table) = [var] ++ (getTableVars table)
+getTableVars (Column var _)        = [var]
+getTableVars (Columns var _ table) = [var] ++ (getTableVars table)
 
 -- Returns the Row of a given index in a table in form [(column, content)]
 -- e.g. (Columns x1 ["c","cc","ccc","cccc"] (Column x2 ["s","sa","sas","sasa"])) 4 ===> [(VarBasic x1,"cccc"),(VarBasic x2, "sasa")]
-getRow :: Table -> Int -> [(Basic, String)]
-getRow (Column b cs) index        = [(b,cs!!index)]
-getRow (Columns b cs table) index = [(b,cs!!index)] ++ (getRow table index)
+getRow :: Table -> Int -> [(String, String)]
+getRow (Column v cs) index        = [(v,cs!!index)]
+getRow (Columns v cs table) index = [(v,cs!!index)] ++ (getRow table index)
 
 -- Returns the number of rows in a given table
 -- e.g. (Column _ ["s","sa","sas","sasa"])  ===> 4
 getNumberOfRows :: Table -> Int
-getNumberOfRows (Column b [])            = 0
-getNumberOfRows (Column b (c:cs))        = 1 + getNumberOfRows (Column b cs)
-getNumberOfRows (Columns b [] table)     = 0
-getNumberOfRows (Columns b (c:cs) table) = 1 + getNumberOfRows (Columns b (cs) table)
+getNumberOfRows (Column v [])            = 0
+getNumberOfRows (Column v (c:cs))        = 1 + getNumberOfRows (Column v cs)
+getNumberOfRows (Columns v [] table)     = 0
+getNumberOfRows (Columns v (c:cs) table) = 1 + getNumberOfRows (Columns v (cs) table)
 
 
 -- Decides if a list of tables contains any duplicate variables 
@@ -257,11 +227,34 @@ areDuplicateVars :: Tables -> Bool
 areDuplicateVars tables | duplicates (getTablesVars tables) = True
                         | otherwise = False
 
-
 getTables :: Tables -> [Relation] -> Tables
 getTables [] _ = []
-getTables ((r,table):tables)) relationsToGet | r `elem` relationsToGet = [(r,table)] ++ (getTables tables relationsToGet)
-                                             | otherwise               = (getTables tables relationsToGet)
+getTables ((r,table):tables) relationsToGet | r `elem` relationsToGet = [(r,table)] ++ (getTables tables relationsToGet)
+                                            | otherwise               = (getTables tables relationsToGet)
+
+
+-- Combines all individual Tables in Tables to produce one coherent row across all relations
+-- e.g. 
+{- Relation A = 1,2\n 3,4\n ;   Relation B = 5,6\n 7,8\n ;
+   Tables ts = [(Relation A, tableA), (Relation B, tableB)]
+
+   Will first combine [[]] with tableA, producing        -> [ [(VarBasic _, 1),(VarBasic _, 2)], [(VarBasic _, 3), (VarBasic _, 4)] ]
+   Hence we can see each list within the list is a 'Row' 
+
+   We will now combine this above with tableB, producing -> [ [(VarBasic _, 1),(VarBasic _,2),(VarBasic _,5), (VarBasic _,6)],
+                                                              [(VarBasic _, 1),(VarBasic _,2),(VarBasic _,7), (VarBasic _,8)], 
+                                                              [(VarBasic _, 3),(VarBasic _,4),(VarBasic _,5), (VarBasic _,6)],
+                                                              [(VarBasic _, 3),(VarBasic _,4),(VarBasic _,7), (VarBasic _,8)] ]
+-}
+getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
+getNextAndCombine combinations ((_,table):[])     = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
+getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
+
+--[[("x1","Sasa")],[("x1","Plasha")] [("k","CC")],[("k","Sasa")],[("k","Jack")]]
+-- Will cause output errors in cases where there are lots of Relations
+combineRows :: [[(String,String)]] -> [[(String,String)]] -> [[(String,String)]]
+combineRows rows1 rows2 = [ r1 ++ r2 | r1 <- rows1, r2<-rows2]
+
 
 -- =============================================================  ENV MAKERS  =======================================================================================
 
@@ -276,62 +269,68 @@ getTables ((r,table):tables)) relationsToGet | r `elem` relationsToGet = [(r,tab
 
 -- Returns FILEPATHS from a program, in the format ["A.csv", "B.csv"] 
 getFilePaths :: Program -> [FilePath]
-getFilePaths (Program (FromGetExpr fromGet _))    = getFilePaths' fromGet
-getFilePaths (Program (FromGetWhere fromGet _ _)) = getFilePaths' fromGet
+getFilePaths (Program statement _ ) = getFilePaths' statement
 
-getFilePaths' :: FromGet -> [FilePath]
-getFilePaths' (FromGetAnd relation _ fromGet) = getFilePaths'' relation ++ getFilePaths' fromGet
-getFilePaths' (FromGet relation _)            = getFilePaths'' relation
+getFilePaths' :: Statements -> [FilePath]
+getFilePaths' (FromGetExpr fromGet)              = getFilePaths'' fromGet
+getFilePaths' (FromGetWhere fromGet _)           = getFilePaths'' fromGet
+getFilePaths' (AnyExpr _ statement1 statement2 ) = getFilePaths' statement1 ++ getFilePaths' statement2
+getFilePaths' (Any _ statement)                  = getFilePaths' statement 
 
-getFilePaths'' :: Relation -> [FilePath]
-getFilePaths'' (Relation r) = [filepath r]
-
+getFilePaths'' :: FromGet -> [FilePath]
+getFilePaths'' (FromGetAnd (Relation r) _ fromGet)   = [filepath r] ++ getFilePaths'' fromGet
+getFilePaths'' (FromGet (Relation r) _)              = [filepath r]
 
 -- Get Relations Variables!, Each variable is assigned to a column in the table! 
 -- Takes a AST, and returns [(Relation "A", ["x1","x2","k","x3"]), (Relation "B" , ["x1","x2","k","x3"])] 
-getVars :: Program -> [(Relation, [Basic])]
-getVars (Program (FromGetExpr fromGet _))    = getVars' fromGet
-getVars (Program (FromGetWhere fromGet _ _)) = getVars' fromGet
+getVars :: Program -> [(Relation, [String])]
+getVars (Program statement _)    = getVars' statement
 
-getVars' :: FromGet -> [(Relation, [Basic])] 
-getVars' (FromGetAnd relation toGet fromGet) = [(relation, (listBasicsToGet toGet))] ++ getVars' fromGet
-getVars' (FromGet relation toGet)            = [(relation, (listBasicsToGet toGet))]
+getVars' :: Statements -> [(Relation, [String])]
+getVars' (FromGetExpr fromGet)              = getVars'' fromGet
+getVars' (FromGetWhere fromGet _)           = getVars'' fromGet
+getVars' (AnyExpr _ statement1 statement2 ) = getVars' statement1 ++ getVars' statement2
+getVars' (Any _ statement)                  = getVars' statement 
 
-listBasicsToGet :: ToGet -> [Basic]
-listBasicsToGet (Params (Some v))      = [SomeBasic v] -- Change this
-listBasicsToGet (Params1 (Var v))      = [VarBasic v]
-listBasicsToGet (Params2 toGet toGet1) = listBasicsToGet toGet ++ listBasicsToGet toGet1
+
+getVars'' :: FromGet -> [(Relation, [String])] 
+getVars'' (FromGetAnd relation vars fromGet) = [(relation, (getVars''' vars))] ++ getVars'' fromGet
+getVars'' (FromGet relation vars)            = [(relation, (getVars''' vars))]
+
+getVars''' :: Vars -> [String]
+getVars''' (Param (Var v))       = [v]
+getVars''' (Params (Var v) vars) = [v] ++ getVars''' vars
 
 -- Generate the Tables. 
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
 -- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
-makeTables :: [String] -> [(Relation, [Basic])] -> Tables 
-makeTables (content:[]) ((relation, basics):[])       = [(relation, (makeTable content basics))]
-makeTables (content:contents) ((relation, basics):ys) = [(relation, (makeTable content basics))] ++ (makeTables contents ys)
-makeTables _ _                                        = error "There should be an error here"
+makeTables :: [String] -> [(Relation, [String])] -> Tables 
+makeTables (content:[]) ((relation, vars):[])       = [(relation, (makeTable content vars))]
+makeTables (content:contents) ((relation, vars):ys) = [(relation, (makeTable content vars))] ++ (makeTables contents ys)
+makeTables _ _                                      = error "There should be an error here"
 
-makeTable :: String -> [Basic] -> Table
+makeTable :: String -> [String] -> Table
 makeTable content basics = makeTable' (splitContents content) basics
 
-makeTable' :: [[String]] -> [Basic] -> Table
-makeTable' [] (b:[])              = Column b []
-makeTable' [] (b:basics)          = Columns b [] (makeTable' [] basics)
-makeTable' (c:[]) (b:[])          = Column b c
-makeTable' (c:content) (b:basics) = Columns b c (makeTable' content basics)
-makeTable' _ _                    = error "There should be an error here"
+makeTable' :: [[String]] -> [String] -> Table
+makeTable' [] (v:[])              = Column v []
+makeTable' [] (v:vars)            = Columns v [] (makeTable' [] vars)
+makeTable' (c:[]) (v:[])          = Column v c
+makeTable' (c:content) (v:vars)   = Columns v c (makeTable' content vars)
+makeTable' _ _                    = error "There should be an error here2"
 
 -- Generates the Enviroment
 makeEnv :: Tables -> Program -> Env
-makeEnv tables (Program (FromGetExpr _) _)                     = TablesEnv tables
-makeEnv tables (Program (FromGetWhere _) _)                    = TablesEnv tables
-makeEnv tables (Program (Any (Var v) nestedStmnts) _)          = MonoEnv v (makeEnv' nestedStmnts tables)
-makeEnv tables (Program (AnyExpr (Var v) nestedStmnts stmnts)) = PolyEnv (MonoEnv v (makeEnv' tables nestedStmnts)) (makeEnv' tables stmnts)
+makeEnv tables (Program (FromGetExpr _) _)                       = TablesEnv tables
+makeEnv tables (Program (FromGetWhere _ _) _)                    = TablesEnv tables
+makeEnv tables (Program (Any (Var v) nestedStmnts) _)            = MonoEnv v (makeEnv' tables nestedStmnts )
+makeEnv tables (Program (AnyExpr (Var v) nestedStmnts stmnts) _) = PolyEnv (MonoEnv v (makeEnv' tables nestedStmnts)) (makeEnv' tables stmnts)
 
 makeEnv' :: Tables -> Statements -> Env
 makeEnv' tables (FromGetExpr fromGet)                 = makeEnv'' tables fromGet
 makeEnv' tables (FromGetWhere fromGet _)              = makeEnv'' tables fromGet
-makeEnv' tables (Any (Var v) nestedStmnts)            = MonoEnv v (makeEnv' nestedStmnts tables)
-makeEnv' tables (AnyExpr (Var v) nestedStmnts stmnts) = PolyEnv (MonoEnv v (makeEnv' nestedStmnts tables)) (makeEnv' tables stmnts)
+makeEnv' tables (Any (Var v) nestedStmnts)            = MonoEnv v (makeEnv' tables nestedStmnts )
+makeEnv' tables (AnyExpr (Var v) nestedStmnts stmnts) = PolyEnv (MonoEnv v (makeEnv' tables nestedStmnts )) (makeEnv' tables stmnts)
 
 makeEnv'' :: Tables -> FromGet -> Env
 makeEnv'' tables (FromGet r _)               = TablesEnv (getTables tables [r])
@@ -346,9 +345,9 @@ makeEnv'' tables (FromGetAnd r vars fromGet) = TablesEnv (getTables tables (getR
 
 
 -- Turns the Data Type:  Vars ====> [String] ; Retains order
-convertAsVars :: AsVars -> [String]
-convertAsVars (AsVar (Var s))         = [s]
-convertAsVars (AsVars (Var s) asVars) = [s] ++ (convertAsVars asVars)
+convertVars :: Vars -> [String]
+convertVars (Param (Var s))       = [s]
+convertVars (Params (Var s) vars) = [s] ++ (convertVars vars)
 
 -- converts Equals into a [(String,String)] such that [("x1","x2"),("x3","x4")] x1=x2 and x3=x4
 convertEquals :: Equals -> [(String,String)]
@@ -356,9 +355,16 @@ convertEquals (EqualVar var1 var2)     = [(getStringVar var1, getStringVar var2)
 convertEquals (EqualVars var1 var2 eq) = [(getStringVar var1, getStringVar var2)] ++ (convertEquals eq) 
 
 
-getRelations :: FromGet -> [String]
+getRelations :: FromGet -> [Relation]
 getRelations (FromGet r _)            = [r]
 getRelations (FromGetAnd r _ fromGet) = [r] ++ getRelations fromGet
+
+
+getEqualities :: Statements -> [(String,String)]
+getEqualities (FromGetExpr fromGet)             = []
+getEqualities (FromGetWhere fromGet equals)     = convertEquals equals
+getEqualities (Any _ stmnt)                     = getEqualities stmnt
+getEqualities (AnyExpr _ stmnt1 stmnt2)         = getEqualities stmnt1 ++ getEqualities stmnt2
 
 -- takes the sting part of the Var: Var "x1" = "x1"
 getStringVar :: Var -> String
@@ -367,10 +373,10 @@ getStringVar (Var v) = v
 equalList :: [String] -> [String] -> Bool
 equalList x y = null (x \\ y) && null (y \\ x)
 
-removeDuplicates :: [String] -> [String]
+removeDuplicates :: [String]  -> [String]
 removeDuplicates [] = []
-removeDuplicates (x:xs) | x `elem` xs = removeDuplicates xs
-                        | otherwise   = x:(removeDuplicates xs) 
+removeDuplicates (x:xs)  | x `elem` xs  = removeDuplicates xs 
+                         | otherwise    = x:(removeDuplicates xs ) 
 
 
 -- if anything is true => theres is a duplicate

@@ -1,0 +1,25 @@
+//TEST CASE: 8
+//TESTING  : Equality; error
+
+//C:
+//1
+//1
+
+
+//Expected: error
+  
+
+
+start
+
+from C get x1
+where {
+    x1=x2;
+}
+as x2,x1
+
+end
+
+//Actual: All Variables should be declared as AS Vars
+
+//Verdict: PAss, maybe needs refinement for the error

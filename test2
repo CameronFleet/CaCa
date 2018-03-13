@@ -1,0 +1,36 @@
+//TEST CASE: 2
+//TESTING  : Simple Conjuction; 3 tables
+
+//A:    B:      C:
+//1,2   3,4     5
+//2,3   1,2     6
+
+
+//Expected: 5,2,4,3,1
+//          5,3,2,1,2
+//          5,3,2,3,2
+//          6,2,4,3,1
+//          6,3,2,1,2      
+
+
+start
+
+from A get x1,x2 and
+from B get x3,x4 and
+from C get x5
+as x5,x2,x4,x3,x1
+
+end
+
+
+//Actual:
+//5,2,4,3,1
+//6,2,4,3,1
+//5,2,2,1,1
+//6,2,2,1,1
+//5,3,4,3,2
+//6,3,4,3,2
+//5,3,2,1,2
+//6,3,2,1,2
+
+//ehhh idk

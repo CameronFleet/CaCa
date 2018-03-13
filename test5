@@ -1,0 +1,24 @@
+//TEST CASE: 5
+//TESTING  : Conjunction and variable repetition; basic 
+
+//A:    C:
+//1,2   1
+//2,3   1
+
+
+//Expected: 2,1
+//          2,1   
+
+
+start
+
+from A get x1,x2 and
+from C get x1
+as x2,x1
+
+end
+
+//Actual: 2,1
+//        2,1
+
+//Verdict: PAss

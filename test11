@@ -1,0 +1,22 @@
+//TEST CASE: 11
+//TESTING  : Existential quantification; 
+
+//A:          
+//1,2        
+//2,2       
+  
+start
+
+any(z){
+    from A get x1,x4
+}
+as x1,x4
+
+end
+
+//Expected: 1 
+//          2
+
+//Actual: 
+
+//Verdict: PASS

@@ -1,0 +1,27 @@
+//TEST CASE: 9
+//TESTING  : Equality; multiple columns
+
+//A:    B:
+//1,2   3,4
+//2,2   6,2
+
+
+//Expected: 2,2,6,2
+  
+
+
+start
+
+from A get x1,x2 and
+from B get x3,x4
+where{
+    x2=x4;
+    x1=x4;
+}
+as x1,x2,x3,x4
+
+end
+
+//Actual: 
+
+//Verdict: PAss

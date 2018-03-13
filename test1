@@ -1,0 +1,22 @@
+//TEST CASE: 1
+//TESTING  : Simple Conjuction; as vars order 
+
+//A:    B:
+//1,2   3,4
+//2,3   1,2
+
+
+//Expected: 1,2,4,3
+//          2,3,2,1
+//          1,2,2,1
+//          2,3,4,3
+
+start
+
+from A get x1,x2 and
+from B get x3,x4
+as x1,x2,x4,x3
+end
+
+//Actual: YUP
+//PASS

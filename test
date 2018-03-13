@@ -1,0 +1,11 @@
+start
+any(k) {
+	from A get x1,k
+}
+//this returns B
+from B get k
+where {
+	x1=k;
+}
+as x1,k
+end

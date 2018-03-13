@@ -1,0 +1,22 @@
+//TEST CASE: 4
+//TESTING  : Simple Conjuction; Empty
+
+//A:    D:
+//1,2  
+//2,3  
+
+
+//Expected:    
+
+
+start
+from A get x1,x2 and
+from D get x5,x6,x24
+as x5,x1,x2,x6,x24
+
+end
+
+
+//Actual: 
+
+//Verdict: PASS
