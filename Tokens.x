@@ -2,9 +2,7 @@
 module Tokens where 
 }
 
-%wrapper "basic" 
-$digit = 0-9     
--- digits 
+%wrapper "basic"     
 $alpha = [a-z0-9]    
 $relation = [A-Z]
 -- alphabetic characters
@@ -30,7 +28,7 @@ $white+       ;
   \)            { \s -> TokenRBracket }
 
 
-  $digit+       ;
+
   $alpha+      { \s -> TokenString s } 
   $relation+   { \s -> TokenRelationalSymbol s } 
 
