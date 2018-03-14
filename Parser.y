@@ -7,26 +7,24 @@ import Tokens
 
 %name caca 
 %tokentype { Token } 
-%error { parseError }
 %token 
-    start   { TokenStart } 
-    end     { TokenEnd } 
-    '='     { TokenEquals } 
-    '{'     { TokenLCurlyBrace } 
-    '}'     { TokenRCurlyBrace} 
-    some    { TokenSome } 
-    where   { TokenWhere } 
-    ';'     { TokenSemicolon }
-    and     { TokenAnd }
-    ','     { TokenComma }
-    from    { TokenFrom }
-    get     { TokenGet }
-    string  { TokenString $$ }
-    relation { TokenRelationalSymbol $$ }
-    as      { TokenAs}
-    any     { TokenAny}
-    '('     { TokenLBracket }
-    ')'     { TokenRBracket }
+    start   { TokenStart _} 
+    end     { TokenEnd _} 
+    '='     { TokenEquals _} 
+    '{'     { TokenLCurlyBrace _} 
+    '}'     { TokenRCurlyBrace _} 
+    where   { TokenWhere _} 
+    ';'     { TokenSemicolon _}
+    and     { TokenAnd _}
+    ','     { TokenComma _}
+    from    { TokenFrom _}
+    get     { TokenGet _}
+    string  { TokenString _ $$ }
+    relation { TokenRelationalSymbol _ $$ }
+    as      { TokenAs _}
+    any     { TokenAny _}
+    '('     { TokenLBracket _}
+    ')'     { TokenRBracket _}
 
 
 %% 
@@ -52,8 +50,7 @@ Var      : string      { Var $1 }
 Relation : relation    { Relation $1}
     
 { 
-parseError :: [Token] -> a
-parseError _ = error "Parse error on " 
+
 
 data Program = Program Statements Vars deriving Show
 
@@ -74,6 +71,15 @@ data Vars = Param Var
 data Var =  Var String deriving (Show,Eq)
 data Relation = Relation String deriving (Show,Eq)
 
+
+happyError :: [Token] -> a
+happyError tks = error ("Parse error at " ++ lcn ++ "\n")
+  where
+  lcn =   case tks of
+      [] -> "end of file"
+      (tk:_) -> "line " ++ show l ++ ", column " ++ show c
+                where
+                     AlexPn _ l c = token_posn tk
 
 --main = do 
 --  inStr <- getContents
