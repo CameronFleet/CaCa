@@ -4,16 +4,13 @@ import Tokens
 import Control.Monad
 import Data.Char
 import Data.List
-
+import System.Environment
 
 {- 
 TODO: 
-- sorting
-- errors
-- testing
-- syntax - fucked us, but maybe saved
-- removing white space - maybe done, tested
-- maybe add repteated as vars
+- ERRORS 
+  - PARSER
+  - SEMANTIC
 -}
 
 
@@ -21,7 +18,7 @@ TODO:
 type Tables = [(Relation, Table)] 
 
 -- The Data Structure used to store all the information need about any given Relation
--- String    : Denotes the Variable or Existential quantification associated with a column
+-- String   : Denotes the Variable or Existential quantification associated with a column
 -- [String] : Denotes the Contents of a column, each String in this list are on distinct rows
 {- EXAMPLE
 A.csv = 1,2\n 3,4\n.; ∃k.A(x1,k)
@@ -38,6 +35,10 @@ Env = MonoEnv "k" (TablesEnv (Columns "x1" ["1","3"] (Column "k" ["2","4"])))
 -}
 data Env = PolyEnv Env Env | MonoEnv String Env | TablesEnv Tables deriving Show
 
+-- The Data Identifier used to distinguish between Existential quantifers and variables
+-- Note, each ExQ (Existential quantifer) also has a corrosponding Int generated uniquely by the enviroment it is in
+data Basic = ExQ String Int | V String deriving Show
+
 {- ===============================================================  EVAL  =============================================================== -}
 
 -- {- OVERVIEW 
@@ -53,31 +54,40 @@ eval (Program stmnts asVars) env  = evalAsVars asVars (getEqualities stmnts) env
 -- Evalutes the AsVars Statement
 -- ERROR: Returns an error for the case where not all Variables declared are listed in the 'As' Statement
 evalAsVars :: Vars -> [(String,String)] -> Env -> String
-evalAsVars asVars equals env       | equalList freeVaribles (convertVars asVars) = printAsVars (convertVars asVars) equals env
-                                   | otherwise                                   = error "All Variables should be declared as AS Vars"
+evalAsVars asVars equals env       | equalList freeVaribles listAsVars           = printAsVars (convertVars asVars) equals env
+                                   | otherwise                                   = error errorMsg
                                    where freeVaribles = removeDuplicates (getFreeVariables env)
+                                         listAsVars   = removeDuplicates (convertVars asVars)
+                                         errorMsg     = "Undefined or Missing 'as' variables : DEFINED = "
+                                                        ++ intercalate "," listAsVars ++ "   EXPECTED = "
+                                                        ++ intercalate "," freeVaribles
 
 {- ==========================================================  EvalAsVar AUX  ============================================================ -}
 
 {- OVERVIEW 
 
--- printAsVars       => -returns output string 
+-- printAsVars       => -returns output string gi
 
 -- filterEqualVars   => -filters the list of 'rows' into a new list of 'rows' where equal vars have equal contents
 -- filterExtQuant    => -filters the list of 'rows' into a new list of 'rows' where equal Ext. Quant. have equal contents
 -- filterEqualities  => -filters the list of 'rows' into a new list of 'rows' where for each equality pair they have equal contents
 
--- processExtQuant   => -processes the list of 'rows' removing the columns which show Ext. Quant. values 
+-- processExtQuant   => -produces a list of 'rows' given an enviroment
+
+-- removeExtQuant    => -processes the list of 'rows' removing the columns which show Ext. Quant. values 
 -- orderAs           => -processes the list of 'rows' formating them in the format described in the As statement 
+
+-- makeExtQuant      => -helper is a helper function of processExtQuant
+-- getIdOfVar        => -helper of makeExtQuant
 
 -}
 
 -- Evaluates the AsVars returning the Output String, WITH EQUALITY! 
 -- Parameter $1: List of asVars denoting the ordering; e.g. ["x1","x3","x2"] 
--- Parameter $2: 
+-- Parameter $2: List of equalities;  e.g. [("x1","x2")] meaning x1=x2
 printAsVars :: [String] -> [(String,String)] -> Env -> String
-printAsVars asVars equals env  = concat (map (orderAs asVars) outputRowsDupEqVars)
-                               where outputRows          = processExtQuant env
+printAsVars asVars equals env  = concat (map (orderAs asVars) (sort (outputRowsDupEqVars)))
+                               where outputRows          = removeExtQuant (filterExtQuant (processExtQuant env))
                                      outputRowsEqVars    = (filterEqualities outputRows equals)
                                      outputRowsDupEqVars = (filterEqualVars outputRowsEqVars)
 
@@ -103,20 +113,21 @@ allVarsEqual' var content ((var2,content2):row) | var == var2 && content == cont
 -- Returns an output of all of the 'rows' but those whose equal EXT. Quantifers contents do not match are removed.
 -- e.g. The Row [(VarBasic v, 3), (SomeBasic k, 2), (SomeBasic k, 3)] would be removed since the contents, 2 /= 3 of equal EXT. Quantifers k 
 -- e.g. The Row [(VarBasic v, 3), (SomeBasic k, 2), (SomeBasic k, 2)] would be kept since the contents, 2 == 2 of the equal EXT. Quantifers k
-filterExtQuant :: [[(String,String)]] -> [String] -> [[(String, String)]]
-filterExtQuant rows boundVars = [ row | row <- rows, allExtQuantEqual row boundVars]
+filterExtQuant :: [[(Basic,String)]] -> [[(Basic, String)]]
+filterExtQuant rows = [ row | row <- rows, allExtQuantEqual row ]
 
-allExtQuantEqual :: [(String,String)] -> [String] -> Bool
-allExtQuantEqual [] _ = True
-allExtQuantEqual ((var,content):row) boundVars | var `elem` boundVars = allExtQuantEqual' var content row && allExtQuantEqual row boundVars
-                                               | otherwise            = allExtQuantEqual row boundVars
+allExtQuantEqual :: [(Basic,String)]  -> Bool
+allExtQuantEqual [] = True
+allExtQuantEqual ((var,content):row) = allExtQuantEqual' var content row && allExtQuantEqual row
 
-allExtQuantEqual' :: String -> String -> [(String,String)] -> Bool
+allExtQuantEqual' :: Basic -> String -> [(Basic,String)] -> Bool
 allExtQuantEqual' _ _ [] = True
-allExtQuantEqual' var content ((var2, content2):row) | var == var2 && content == content2 = True && allExtQuantEqual' var content row 
-                                                     | var /= var2                        = True && allExtQuantEqual' var content row 
-                                                     | otherwise                          = False                                               
-                                      
+allExtQuantEqual' (V _) _ _ = True
+allExtQuantEqual' (ExQ var id) content ((V _,_):row) = True && allExtQuantEqual' (ExQ var id) content row
+allExtQuantEqual' (ExQ var id) content ((ExQ var2 id2, content2):row) | var == var2 && id == id2 && content == content2 = True && allExtQuantEqual' (ExQ var id) content row
+                                                                       | var == var2 && id == id2 && content /= content2 = False
+                                                                       | otherwise    
+                                                                                                          = True && allExtQuantEqual' (ExQ var id) content row
 -- Evaluates each row for all equalities, checking the contents of variables that are meant to be equal and returning those whose content do match
 -- Parameter $1: List of every row, a single row can be described as such: [(x1,"content"), (x2, "content"), (x3,"content")]
 -- Parameter $2: List of all equalities required ; e.g. [("x1","x2"),("x3","x4")] means x1=x2 and x3=x4 
@@ -141,29 +152,16 @@ eqVars' ((var,content):[]) eqVar   | var == eqVar = [content]
 eqVars' ((var,content):rows) eqVar | var == eqVar = [content] ++ eqVars' rows eqVar
                                    | otherwise    = eqVars' rows eqVar
 
--- Returns an output of all the rows but with individual columns of 'Some' variables removed and Basic-> String, since all will be vars 
--- e.g. The Row [(VarBasic v, 3), (SomeBasic k, 2), (SomeBasic k, 2)] ==> [(v, 3)]
-processExtQuant :: Env -> [[(String,String)]]
-processExtQuant (TablesEnv tables) = getNextAndCombine [[]] tables
-processExtQuant (MonoEnv v env) = processExtQuant' [v] env
-processExtQuant (PolyEnv env1 env2) = combineRows (processExtQuant' [] env1) (processExtQuant' [] env2)
+-- Removes all of the existing Ext.Quantifers from the output string, also turns Basic -> String since all will be vars! 
+-- Parameter $1: List of rows with ExQ indentifiers 
+removeExtQuant :: [[(Basic, String)]] -> [[(String,String)]]
+removeExtQuant []       = []
+removeExtQuant (r:rows) = [removeExtQuant' r] ++ removeExtQuant rows 
 
-processExtQuant' :: [String] -> Env -> [[(String, String)]]
-processExtQuant' boundVars (TablesEnv tables)  = processExtQuant'' newTable boundVars
-                                               where newTable = filterExtQuant (getNextAndCombine [[]] tables) boundVars
-processExtQuant' boundVars (MonoEnv v env)     = processExtQuant' (boundVars ++ [v]) env
-processExtQuant' boundVars (PolyEnv env1 env2) = combineRows (processExtQuant' boundVars env1) (processExtQuant' boundVars env2)
-
-processExtQuant'' :: [[(String, String)]] -> [String] -> [[(String,String)]]
-processExtQuant'' [] _ = []
-processExtQuant'' rows [] = rows
-processExtQuant'' (r:rows) boundVars = [processExtQuant''' r boundVars] ++ processExtQuant'' rows boundVars
-
-processExtQuant''' :: [(String, String)] -> [String] -> [(String, String)]
-processExtQuant''' ((var,content):[]) boundVars  | var `elem` boundVars = []
-                                                 | otherwise            = [(var,content)]
-processExtQuant''' ((var,content):row) boundVars | var `elem` boundVars = processExtQuant''' row boundVars
-                                                 | otherwise            = [(var,content)] ++ (processExtQuant''' row boundVars)
+removeExtQuant' :: [(Basic, String)] -> [(String,String)]
+removeExtQuant' []                     = []
+removeExtQuant' ((ExQ _ _, _):row)      = removeExtQuant' row
+removeExtQuant' ((V var, content):row) = [(var,content)] ++ removeExtQuant' row
 
 -- Parameter $1: all Rows in form (Variable, Content) so e.g if r1 x1, (Row 1, Column x1) contains "Hello" then this will be [("x1", "Hello")]
 -- Parameter $2: the AsVar variables e.g in the form such ["x1","x4","x2","x3"] denotes the printing out in this order                                 
@@ -178,10 +176,67 @@ orderAs' ((var,content):row) v  | v == var = content
 
 -- ==========================================================  ENV MANIPULATORS  ====================================================================================
 
+{- OVERVIEW 
+
+-- getFreeVariables  => -returns all the freeVariables in a given Env
+
+-- processExtQuant   => -produces a list of 'rows' given an enviroment
+
+-- makeExtQuant      => -helper is a helper function of processExtQuant
+-- getIdOfVar        => -helper of makeExtQuant
+
+-}
+
 getFreeVariables :: Env -> [String]
 getFreeVariables (TablesEnv tables) = removeDuplicates (getTablesVars tables)
 getFreeVariables (MonoEnv v env) = (getFreeVariables env) \\ [v]
 getFreeVariables (PolyEnv env1 env2) = removeDuplicates ((getFreeVariables env1) ++ (getFreeVariables env2))
+
+
+-- Fully Evaluates an Enviroment providing a breakdown of rows retaining the nature of unique ext. quantifers
+-- Parameter $1: An enviroment
+-- Output: Rows in the structure [ [(ExQ k 100, "hello"),(V x1, "bye")] , [(ExQ k 100, "hi"),(V x1, "bibi")] ] where there are two rows, and two columns
+processExtQuant :: Env -> [[(Basic,String)]]
+processExtQuant env = combineTables (processExtQuant' env)
+
+processExtQuant' :: Env -> [[(Basic,[String])]] 
+processExtQuant' (TablesEnv tables)  = makeExtQuantList' [] (tablesToVarList tables) 1000
+processExtQuant' (MonoEnv v env)     = makeExtQuantList [(v,0)] env 0
+processExtQuant' (PolyEnv env1 env2) = processExtQuant'' env1 1 ++ processExtQuant'' env2 100
+
+processExtQuant'' :: Env -> Int -> [[(Basic,[String])]] 
+processExtQuant'' (TablesEnv tables) id  = makeExtQuantList' [] (tablesToVarList tables) id 
+processExtQuant'' (MonoEnv v env) id     = makeExtQuantList [(v,id)] env id
+processExtQuant'' (PolyEnv env1 env2) id = processExtQuant'' env1 (id+1) ++ processExtQuant'' env2 (id+100)
+
+-- Make the correct output list of columns
+-- Parameter $1: Currently boundVars by the current Env
+-- Parameter $2: The current ENV 
+-- Parameter $3: The current accumalated ID
+-- Output: A list of the columns in each table in the format [[(ExQ k 100,["hello","hi"]),(V x1,["bye","bibi"])]] each item is a individual relation(table) 
+makeExtQuantList :: [(String,Int)] -> Env -> Int -> [[(Basic,[String])]]
+makeExtQuantList boundVars (TablesEnv tables) id  = makeExtQuantList' boundVars (tablesToVarList tables) id
+makeExtQuantList boundVars (MonoEnv v env) id     = makeExtQuantList (boundVars ++ [(v,id)]) env id
+makeExtQuantList boundVars (PolyEnv env1 env2) id = (makeExtQuantList boundVars env1 (id+1)) ++ (makeExtQuantList boundVars env2 (id+100))
+
+makeExtQuantList' :: [(String,Int)] -> [[(String,[String])]] -> Int -> [[(Basic,[String])]]
+makeExtQuantList' _ [] _ = []
+makeExtQuantList' boundVars (r:rows) id = [(makeExtQuantList'' boundVars r id)] ++ (makeExtQuantList' boundVars rows id)
+
+makeExtQuantList'' :: [(String,Int)] -> [(String,[String])] -> Int -> [(Basic,[String])]
+makeExtQuantList'' boundVars ((var, content):[]) id  | var `elem` (map fst boundVars) = [(ExQ var (getIdOfVar var boundVars), content)] 
+                                                     | otherwise                      = [(V var, content)] 
+
+makeExtQuantList'' boundVars ((var, content):row) id | var `elem` (map fst boundVars) = [(ExQ var (getIdOfVar var boundVars), content)] ++ makeExtQuantList'' boundVars row id
+                                                     | otherwise                      = [(V var, content)] ++ makeExtQuantList'' boundVars row id
+
+-- Return the id of a given bound var
+getIdOfVar :: String -> [(String,Int)] -> Int
+getIdOfVars var1 ((var2,id):[])   | var1 == var2 = id 
+                                  | otherwise = error "smth"
+getIdOfVar var1 ((var2,id):bVars) | var1 == var2 = id
+                                  | otherwise  = getIdOfVar var1 bVars
+
 
 -- ==========================================================  TABLE MANIPULATORS  ====================================================================================
 
@@ -191,8 +246,16 @@ getFreeVariables (PolyEnv env1 env2) = removeDuplicates ((getFreeVariables env1)
 -- getRow             => -returns a specified row by index in a given table
 -- getNumberOfRows    => -returns a Int value of how many rows are in a given table
 
+-- rowsInTable        => -returns a Int value of how many rows there are in a given table in format [(Column variable, [contents of column])]
+-- getRowInList       => -returns a specified row by index in a given table in format [(Column variable, [contents of column])]
+
+
 -- areDuplicateVars   => -decides if a given list of tables contains multiple of the same variables, returning bool
 
+-- getNextAndCombine  => -turns a list of tables into a list of rows containing all combinations
+-- combineTables      => -turns a list of tables in the form [[(Column variable, [contents of column])]] into a list of rows containing all combinations
+-- convertTable       => -turns a single table in the form [(Column variable, [contents of column])] into the list of rows containing all combinations
+-- tablesToVarList    => -turns a list of tables into a list of all variables present, the form [[(Column variable, [contents of column])]]
 -}
 
 -- Returns a list of all variables in all tables given as an arguement
@@ -250,11 +313,33 @@ getNextAndCombine :: [[(String,String)]] -> Tables -> [[(String,String)]]
 getNextAndCombine combinations ((_,table):[])     = [ c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]
 getNextAndCombine combinations ((_,table):tables) = getNextAndCombine ([c ++ getRow table x | c <- combinations, x <-[0..(getNumberOfRows table -1)]]) tables
 
---[[("x1","Sasa")],[("x1","Plasha")] [("k","CC")],[("k","Sasa")],[("k","Jack")]]
--- Will cause output errors in cases where there are lots of Relations
-combineRows :: [[(String,String)]] -> [[(String,String)]] -> [[(String,String)]]
-combineRows rows1 rows2 = [ r1 ++ r2 | r1 <- rows1, r2<-rows2]
 
+combineTables :: [[(Basic,[String])]] -> [[(Basic,String)]]
+combineTables []             = [] 
+combineTables (table:[])     = convertTable table
+combineTables (table:tables) = combineTables' tables (convertTable table) 
+
+combineTables' :: [[(Basic,[String])]] -> [[(Basic,String)]] -> [[(Basic,String)]]
+combineTables' (newTable:[]) table     = [ row ++ newRow | row <- table, newRow <- (convertTable newTable)]
+combineTables' (newTable:tables) table = combineTables' tables ([ row ++ newRow | row <- table, newRow <- (convertTable newTable)])
+
+convertTable :: [(Basic,[String])] -> [[(Basic, String)]]
+convertTable table = [getRowInList table index | index <- [0..rowsInTable table -1]]
+
+rowsInTable :: [(Basic,[String])] -> Int
+rowsInTable ((_,xs):_) = length xs
+
+getRowInList :: [(Basic,[String])] -> Int -> [(Basic, String)]
+getRowInList [] _ = []
+getRowInList ((var,content):table) index = [(var, content!!index)] ++ getRowInList table index
+
+tablesToVarList :: Tables -> [[(String,[String])]]
+tablesToVarList [] = []
+tablesToVarList ((_,table):tables) = [tablesToVarList' table] ++ tablesToVarList tables
+
+tablesToVarList' :: Table -> [(String,[String])]
+tablesToVarList' (Column var content) = [(var,content)]
+tablesToVarList' (Columns var content table) = [(var,content)] ++ tablesToVarList' table
 
 -- =============================================================  ENV MAKERS  =======================================================================================
 
@@ -264,7 +349,7 @@ combineRows rows1 rows2 = [ r1 ++ r2 | r1 <- rows1, r2<-rows2]
 -- getVars       => -returns a list of typles of all Relation Symbols along with a list all of the Variables/Ext. Quant within this relation given a Program AST 
 
 -- makeTables    => -makes a list of Tables, given a list of the content from each Relation and the associated list made by getVars 
--- makeEnv       => -makes
+-- makeEnv       => -makes an Env given a list of tables and a program
 -}
 
 -- Returns FILEPATHS from a program, in the format ["A.csv", "B.csv"] 
@@ -340,6 +425,23 @@ makeEnv'' tables (FromGetAnd r vars fromGet) = TablesEnv (getTables tables (getR
 
 {- OVERVIEW
 
+-- convertVars      => -converts of type Vars into [String] containing all the vars 
+-- convertEquals    => -converts of type Equals into [(String,String)] containg all the equalities, e.g. (x1,x2) x1=x2; 
+ 
+-- getRelations     => -converts of type FromGet into [Relation] containg all relations present 
+-- getEqualities    => -converts of type Statement into a complete list of all equalities in the program
+-- getStringVar     => -converts of type Var into a String 
+
+-- equalList        => -decides if two lists are equal
+-- duplicates       => -decides if a list contains a duplicate
+
+-- removeDuplicates => -produces a list, given a list, without duplicates
+
+-- splitContents    => -splits a single row string and splits it based on CSV rules producing [String]
+-- clean            => -splits a single row on newline basis
+
+-- wordsWhen        => -helper for clean and splitContents
+-- removeWhiteSpace => -helper for original input, removes all whiteSpace 
 
 -}
 
@@ -410,13 +512,16 @@ wordsWhen p s =  case dropWhile p s of
                       s' -> w : wordsWhen p s''
                             where (w, s'') = break p s'
 
-
+-- Removes all white space from a list of strings
 removeWhiteSpace :: [String] -> [String]
 removeWhiteSpace list = [ filter (/=' ') l | l <- list]
 
 -- ================================================================  IO  =============================================================================================
 
 {- OVERVIEW
+
+--readFiles  => -takes a list of FilePaths and reads from each file path producing a list with the contents of each file inside
+--filepath   => -takes a string and converts it into a FilePath, with .csv
 
 -}
 
@@ -429,10 +534,13 @@ filepath s = (s ++ ".csv")
 -- ================================================================  MAIN  =========================================================================================== 
 main :: IO ()
 main = do
-    s <- getContents
+
+    -- Reads : arguemnts from command line, the first arguement is the programFile which is read
+    args <- getArgs
+    program <- readFile (head args)
 
     -- Assigns : ast, to the abstract syntax tree generated by lexer and parser
-    let ast = caca (alexScanTokens s)
+    let ast = caca (alexScanTokens (program))
 
     -- Assigns : relationContents, to a list containing all of the files info, e.g. file A contains : "hi,bye" and file B contanis "low,high"
     -- then relationContents will be = ["hi,bye", "low,high"]
