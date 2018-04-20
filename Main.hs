@@ -58,7 +58,7 @@ evalAsVars asVars equals env       | equalList freeVaribles listAsVars          
                                    | otherwise                                   = error errorMsg
                                    where freeVaribles = removeDuplicates (getFreeVariables env)
                                          listAsVars   = removeDuplicates (convertVars asVars)
-                                         errorMsg     = "Undefined or Missing 'as' variables : DEFINED = "
+                                         errorMsg     = "ERROR: Undefined or Missing 'as' variables   DEFINED = "
                                                         ++ intercalate "," listAsVars ++ "   EXPECTED = "
                                                         ++ intercalate "," freeVaribles
 
@@ -170,7 +170,7 @@ orderAs (asVar:[]) row = orderAs' row asVar ++ "\n"
 orderAs (asVar:asVars) row = (orderAs' row asVar) ++ "," ++ orderAs asVars row
 
 orderAs' :: [(String, String)] -> String -> String
-orderAs' []  _ = error "smth went wrong"
+orderAs' []  _ = error "FATAL ERROR: 'as' var is not present in any row"
 orderAs' ((var,content):row) v  | v == var = content
                                 | otherwise = orderAs' row v
 
@@ -232,8 +232,8 @@ makeExtQuantList'' boundVars ((var, content):row) id | var `elem` (map fst bound
 
 -- Return the id of a given bound var
 getIdOfVar :: String -> [(String,Int)] -> Int
-getIdOfVars var1 ((var2,id):[])   | var1 == var2 = id 
-                                  | otherwise = error "smth"
+getIdOfVar var1 ((var2,id):[])    | var1 == var2 = id 
+                                  | otherwise = error "FATAL ERROR: Variable is not in Bound Vars"
 getIdOfVar var1 ((var2,id):bVars) | var1 == var2 = id
                                   | otherwise  = getIdOfVar var1 bVars
 
@@ -390,19 +390,19 @@ getVars''' (Params (Var v) vars) = [v] ++ getVars''' vars
 -- Parameter $1: List of each Relation data in order e.g ["hi,bye", "low,high"]
 -- Parameter $2: Output of GetVars, the Relation, in order, with the String assignments
 makeTables :: [String] -> [(Relation, [String])] -> Tables 
-makeTables (content:[]) ((relation, vars):[])       = [(relation, (makeTable content vars))]
-makeTables (content:contents) ((relation, vars):ys) = [(relation, (makeTable content vars))] ++ (makeTables contents ys)
-makeTables _ _                                      = error "There should be an error here"
+makeTables (content:[]) ((relation, vars):[])       = [(relation, (makeTable relation content vars))]
+makeTables (content:contents) ((relation, vars):ys) = [(relation, (makeTable relation content vars))] ++ (makeTables contents ys)
+makeTables _ _                                      = error "ERROR: Undeclared column / Undeclared relation"
 
-makeTable :: String -> [String] -> Table
-makeTable content basics = makeTable' (splitContents content) basics
+makeTable :: Relation -> String -> [String] -> Table
+makeTable relation content basics = makeTable' relation (splitContents content) basics
 
-makeTable' :: [[String]] -> [String] -> Table
-makeTable' [] (v:[])              = Column v []
-makeTable' [] (v:vars)            = Columns v [] (makeTable' [] vars)
-makeTable' (c:[]) (v:[])          = Column v c
-makeTable' (c:content) (v:vars)   = Columns v c (makeTable' content vars)
-makeTable' _ _                    = error "There should be an error here2"
+makeTable' :: Relation -> [[String]] -> [String] -> Table
+makeTable' _ [] (v:[])              = Column v []
+makeTable' r [] (v:vars)            = Columns v [] (makeTable' r [] vars)
+makeTable' _ (c:[]) (v:[])          = Column v c
+makeTable' r (c:content) (v:vars)   = Columns v c (makeTable' r content vars)
+makeTable' (Relation r) _ _                    = error ("ERROR: At relation : [" ++ r ++ "]  , Make sure to declare same number of variables as number of entrys in CSV")
 
 -- Generates the Enviroment
 makeEnv :: Tables -> Program -> Env
